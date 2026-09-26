@@ -252,6 +252,60 @@ Freedreno 有原生 OpenGL 驱动（`msm`），但它需要 **DRM 节点**（`/d
 
 ---
 
+## 配套工具
+
+Blender 之外，这几个命令行工具也在同一台设备上**实测可用**，能补上批处理环节：
+
+### 图片批处理 —— `magick`（ImageMagick 7）
+
+渲染序列的缩放 / 转格式 / 生成接触印相（contact sheet）：
+
+```sh
+# 渲染出的 PNG 序列 → 缩放 + 转 JPG
+magick render_0001.png -resize 50% -quality 85 preview.jpg
+
+# 批量处理
+for f in render_*.png; do magick "$f" -resize 25% "small_$f"; done
+
+# 拼成一张预览图
+magick montage render_*.png -tile 4x -geometry +2+2 sheet.png
+```
+
+| 项 | 值 |
+|---|---|
+| 版本 | ImageMagick 7.1.1-43 Q16 aarch64 |
+| 来源 | Debian `imagemagick` 包 |
+
+> ⚠️ 它有两个**编译期路径假设**必须显式覆盖，否则报的错会误导人：
+> `MAGICK_CONFIGURE_PATH`（否则 `UnableToOpenConfigureFile delegates.xml`）
+> 与 `MAGICK_CODER_MODULE_PATH`（否则 `NoDecodeDelegateForThisImageFormat PNG`）。
+> 设了第一个不设第二个，只会从"找不到配置"变成"找不到编解码器"。
+
+### 数据处理 —— `duckdb`
+
+分析渲染日志、资产清单等结构化数据：
+
+```sh
+duckdb -c "SELECT scene, AVG(seconds) FROM read_csv_auto(renders.csv) GROUP BY scene;"
+```
+
+实测：100 万行 CSV 分组聚合，并转成 Parquet（26 MB → 12 MB）。
+
+### 文档输出 —— `typst`
+
+把制作笔记排版成 PDF（含公式），比 LaTeX 轻得多：
+
+```sh
+typst compile notes.typ notes.pdf
+```
+
+### 完整清单
+
+全部可用工具的判据与实测结果见
+[deepseek-harness-android-tools/docs/cli-availability.md](https://github.com/greyoak111/deepseek-harness-android-tools/blob/main/docs/cli-availability.md)。
+
+---
+
 ## 已知限制
 
 | 项 | 状态 | 说明 |
