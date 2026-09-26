@@ -54,6 +54,12 @@ export EGL_PLATFORM=surfaceless
 export GALLIUM_DRIVER=zink
 export MESA_LOADER_DRIVER_OVERRIDE=zink
 
+# 3b) 着色器缓存固定到持久目录。
+#     不设的话缓存会落到默认位置（可能是只读或非持久路径），
+#     每次渲染都要重新编译着色器 —— 实测首次 11.1s vs 预热后 9.8s。
+export MESA_SHADER_CACHE_DIR="${MESA_SHADER_CACHE_DIR:-$BASE/shader-cache}"
+mkdir -p "$MESA_SHADER_CACHE_DIR" 2>/dev/null
+
 # 4) Turnip 走 KGSL（不依赖被 SELinux 挡住的 DRM 节点）
 #    补丁包自带的 ICD 里写的是绝对路径 /usr/lib/...，在非标准根目录下无效，
 #    这里自动生成一份路径修正过的。

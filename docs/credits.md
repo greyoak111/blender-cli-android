@@ -11,7 +11,18 @@
 > *"A Mesa build for containers on Android (PRoot, Chroot, LXC, Droidspaces, etc.),
 > to support hardware acceleration with Adreno GPU."*
 
-**没有这个项目，本仓库的 GPU 部分不可能实现。**
+**⚠️ 一处更正（初版曾写"没有这个项目，GPU 加速不可能实现"，实测后证明这话说过头了）**
+
+后续做对照测试发现：**Debian 发行版自带的 Mesa 25.0.7 也能跑通 EEVEE**，
+所以补丁版 Mesa 并非严格必需。但补丁版确实明显更好：
+
+| Mesa 版本 | Vulkan | 猴头场景 640×480（缓存预热） |
+|---|---|---|
+| Debian 原生 25.0.7 | 1.3.289 | 9.82 s |
+| **补丁版 26.2.0-devel** | **1.4.353** | **6.53 s** |
+
+**结论：补丁版快约 1.4 倍，且 Vulkan 版本更新。推荐使用，但不是硬性前提。**
+（真正不可或缺的是 `__EGL_VENDOR_LIBRARY_FILENAMES`，见 [gpu-breakthrough.md](gpu-breakthrough.md)。）
 
 **具体借鉴了什么：**
 
@@ -21,6 +32,7 @@
    mesa-for-android-container_26.3.0-devel-*_debian_trixie_arm64.tar.gz
    turnip_26.3.0-devel-*_debian_trixie_arm64.tar.gz
    ```
+   实测**快约 1.4 倍**，Vulkan 从 1.3.289 升到 1.4.353。
 
 2. **兼容性确认** —— 项目文档的兼容表明确列出
    **Adreno 710/720/722/730/732/735/740/750 → OpenGL / OpenGL ES / Vulkan 全部 Supported**。
@@ -29,7 +41,8 @@
 3. **环境匹配** —— 它提供的正是 **Debian trixie arm64** 包，
    与我们的 Debian 用户空间完全对应，省掉了自己编译 Mesa 的巨大工作量。
 
-**⭐ 343 · 59 forks** —— 如果你的设备也是 Adreno + 安卓容器场景，强烈建议直接用它。
+**⭐ 343 · 59 forks** —— 如果你的设备也是 Adreno + 安卓容器场景，推荐直接用它。
+
 
 ---
 

@@ -8,12 +8,17 @@
 $ blender --version
 Blender 4.3.2
 
-$ blender -b scene.blend -f 1          # EEVEE（GPU）
-Time: 00:01.75
+$ blender -b scene.blend -f 1          # EEVEE 走 GPU
+Saved: 'render.png'
+Time: 00:07.01                          # 猴头场景 640×480
 
-$ blender -b scene.blend -f 1          # Cycles（CPU）
-Time: 00:01.21
+$ blender -b scene.blend -f 1          # Cycles 走 CPU
+Saved: 'render.png'
+Time: 00:22.39                          # 800×600 @ 128 采样
 ```
+
+> ⚠️ **这两个数字不可直接比较** —— 场景、分辨率、采样数都不同。
+> 想知道 GPU 到底快多少，看下面那组**同场景对照**。
 
 ---
 
@@ -22,19 +27,24 @@ Time: 00:01.21
 | 能力 | 状态 | 实测环境 |
 |---|---|---|
 | Blender CLI | ✅ 4.3.2 / Python 3.13.5 | Lenovo TB320FC |
-| **EEVEE（GPU 渲染）** | ✅ **比软件渲染快 19 倍** | Adreno 730 / Vulkan 1.4.353 |
+| **EEVEE（GPU 渲染）** | ✅ 比软件渲染快 **5–19 倍**（视场景） | Adreno 730 / Vulkan 1.4.353 |
 | **Cycles（CPU 渲染）** | ✅ 800×600@128 = 22.4s | 8 核并行 6.2x |
 | glTF 导出 | ✅ | 可直接喂 Godot |
 | 程序化资产生成 | ✅ Python API + 14 个内置插件 | |
 
-### GPU 加速的证明
+### GPU 加速的证明（同场景 A/B 对照）
 
-同一场景、同一分辨率（640×480），只切换 Mesa 的 Gallium 驱动：
+只切换 Mesa 的 Gallium 驱动，**其余全部相同**（缓存均已预热）：
 
-| 后端 | 耗时 | |
-|---|---|---|
-| `llvmpipe`（纯软件） | **33.51 s** | |
-| `zink`（GPU） | **1.75 s** | **19×** ✅ |
+| 场景 | `llvmpipe`（纯软件） | `zink`（GPU） | 加速比 |
+|---|---|---|---|
+| 默认立方体 640×480 | 33.51 s | 1.75 s | **19×** |
+| 猴头 + 平滑着色 640×480 | 35.05 s | 7.01 s | **5.0×** |
+
+> **加速比随场景变化**：软件渲染两个场景都约 34s（受填充率限制），
+> 而 GPU 在几何/着色复杂的猴头场景上开销明显更高（1.75s → 7.01s）。
+> 两行数字各自都是同场景对照，可放心引用；**跨行比较无意义**。
+
 
 ---
 
@@ -86,17 +96,24 @@ node tools/tpkg.mjs install glibc openjdk-17 \
 # 2) Debian arm64 的 Blender 依赖闭包（400+ 包，约 1.1GB）
 node tools/debtool.mjs install blender python3-numpy
 
-# 3) 补丁版 Mesa（关键！见下文「鸣谢」）
+# 3) 补丁版 Mesa（推荐，见「鸣谢」）
 #    从 lfdevs/mesa-for-android-container 下载 debian_trixie_arm64 的 mesa 包
+#    注：发行版自带的 Mesa 也能跑（实测慢约 1.4 倍），补丁版更快且 Vulkan 更新
 cd "$DEBROOT" && tar xzf mesa-for-android-container_*_debian_trixie_arm64.tar.gz
 
-# 4) 生成 ICD 配置
-sed "s|\\\$DEBROOT|$DEBROOT|" configs/patched_icd.json.template > /tmp/patched_icd.json
-
-# 5) 运行
+# 4) 运行 —— ICD 配置由脚本自动生成，无需手工创建
 sh scripts/blender.sh --version
 sh scripts/blender.sh -b --python script.py
 ```
+
+> **不需要手工生成 ICD 配置。** `scripts/blender.sh` 会自动从
+> `$DEBROOT/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json`
+> 生成一份路径修正过的副本（补丁包自带的那份写的是绝对路径 `/usr/lib/...`，
+> 在非标准根目录下无效）。
+>
+> ⚠️ **切勿写到 `/tmp`** —— 安卓上 `/tmp` 属于 `shell` 用户且受 SELinux 保护，
+> 普通应用**写不进去**（详见 [pitfalls.md #12](docs/pitfalls.md)）。
+> 脚本默认写到 `$BLENDER_ENV/patched_icd.json`。
 
 `tools/debtool.mjs` 支持这些环境变量：
 
