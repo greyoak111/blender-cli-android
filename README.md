@@ -88,32 +88,65 @@ export VK_ICD_FILENAMES=/path/to/patched_icd.json
 
 ### 步骤
 
+在**仓库根目录**执行即可，**无需设置任何环境变量** ——
+两个安装脚本和 `blender.sh` 的默认路径是对齐的（见下方「路径约定」）。
+
 ```sh
-# 1) glibc 运行时 + Vulkan 工具链
+# 1) glibc 运行时 + Vulkan 工具链  → 装到 tools/prefix
 node tools/tpkg.mjs install glibc openjdk-17 \
   vulkan-tools-glibc mesa-vulkan-icd-freedreno-glibc vulkan-icd-loader-glibc
 
-# 2) Debian arm64 的 Blender 依赖闭包（400+ 包，约 1.1GB）
+# 2) Debian arm64 的 Blender 依赖闭包（400+ 包，约 1.1GB）→ 解到 tools/debroot
 node tools/debtool.mjs install blender python3-numpy
 
 # 3) 补丁版 Mesa（推荐，见「鸣谢」）
 #    从 lfdevs/mesa-for-android-container 下载 debian_trixie_arm64 的 mesa 包
 #    注：发行版自带的 Mesa 也能跑（实测慢约 1.4 倍），补丁版更快且 Vulkan 更新
-cd "$DEBROOT" && tar xzf mesa-for-android-container_*_debian_trixie_arm64.tar.gz
+cd tools/debroot && tar xzf /path/to/mesa-for-android-container_*_debian_trixie_arm64.tar.gz && cd -
 
-# 4) 运行 —— ICD 配置由脚本自动生成，无需手工创建
+# 4) 运行
 sh scripts/blender.sh --version
 sh scripts/blender.sh -b --python script.py
 ```
 
-> **不需要手工生成 ICD 配置。** `scripts/blender.sh` 会自动从
-> `$DEBROOT/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json`
-> 生成一份路径修正过的副本（补丁包自带的那份写的是绝对路径 `/usr/lib/...`，
-> 在非标准根目录下无效）。
->
+### 路径约定
+
+**这是最容易被忽略的一环：三个组件的默认路径必须一致。**
+
+| 组件 | 默认位置 | 覆盖变量 |
+|---|---|---|
+| `tools/tpkg.mjs` | `tools/prefix` | `TPKG_PREFIX` |
+| `tools/debtool.mjs` | `tools/debroot` | `DEB_PREFIX` |
+| `scripts/blender.sh` | 上面两个（相对仓库根） | `GLIBC_PREFIX` / `DEBROOT` |
+
+也就是说，**按上面的步骤做，`blender.sh` 零配置就能找到东西**。
+
+想把 1.1GB 装到别处，就让三者指向同一目录：
+
+```sh
+export BLENDER_ENV=/data/blender-env
+TPKG_PREFIX="$BLENDER_ENV/prefix" node tools/tpkg.mjs install ...
+DEB_PREFIX="$BLENDER_ENV/debroot" node tools/debtool.mjs install blender python3-numpy
+sh scripts/blender.sh --version          # blender.sh 读 BLENDER_ENV
+```
+
+> ⚠️ **如果 `blender.sh` 报"找不到 Blender"**，几乎一定是路径没对齐。
+> 它会打印实际查找的位置，对照上表检查即可。
+
+### 关于 ICD 配置
+
+**不需要手工生成。** `scripts/blender.sh` **每次启动都会重新生成**一份：
+
+- 源：`$DEBROOT/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json`
+  （补丁包自带的那份写的是绝对路径 `/usr/lib/...`，在非标准根目录下无效）
+- 目标：`$BASE/patched_icd.json`
+
+每次都重生成是刻意的 —— 否则重新解压 Mesa 或挪动 `DEBROOT` 之后，
+会一直沿用旧的、指向错误路径的那份。
+
 > ⚠️ **切勿写到 `/tmp`** —— 安卓上 `/tmp` 属于 `shell` 用户且受 SELinux 保护，
 > 普通应用**写不进去**（详见 [pitfalls.md #12](docs/pitfalls.md)）。
-> 脚本默认写到 `$BLENDER_ENV/patched_icd.json`。
+
 
 `tools/debtool.mjs` 支持这些环境变量：
 
@@ -123,6 +156,12 @@ sh scripts/blender.sh -b --python script.py
 | `DEB_SUITE` | Debian 套件 | `trixie` |
 | `DEB_SKIP` | 跳过的包（默认跳过 `libc6`，用 Termux 的 glibc） | `libc6` |
 | `DEB_CACHE` | `.deb` 缓存目录 | `tools/debcache` |
+
+`tools/tpkg.mjs` 支持：
+
+| 变量 | 说明 | 默认 |
+|---|---|---|
+| `TPKG_PREFIX` | 安装目标前缀 | `tools/prefix` |
 
 ---
 

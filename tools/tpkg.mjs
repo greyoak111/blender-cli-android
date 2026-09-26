@@ -15,8 +15,9 @@ const REPOS = [
 const BASE = REPOS[0].base;
 const WORK = path.dirname(new URL(import.meta.url).pathname.replace(/%20/g, " "));
 const CACHE = path.join(WORK, "debs");
-const STAGE = path.join(WORK, "stage");           // 解包暂存（Tempux 原始层级）
-const PREFIX = path.join(WORK, "prefix");         // 整理后的最终前缀
+const STAGE = path.join(WORK, "stage");           // 解包暂存（Termux 原始层级）
+// 可用 TPKG_PREFIX 覆盖安装位置（默认与 scripts/blender.sh 的默认约定一致）
+const PREFIX = process.env.TPKG_PREFIX || path.join(WORK, "prefix");  // 整理后的最终前缀
 fs.mkdirSync(CACHE, { recursive: true });
 fs.mkdirSync(STAGE, { recursive: true });
 

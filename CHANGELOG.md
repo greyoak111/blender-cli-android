@@ -1,5 +1,53 @@
 # Changelog
 
+## v1.0.2 —— 二轮评审修正
+
+第二轮评审又指出 4 处，其中第 1 条与 v1.0.1 修的 `/tmp` 问题是**同一类错误**。
+
+### 🐛 修正
+
+- **【路径对不上，最严重】** 三个组件的默认路径互不一致：
+  `debtool` → `tools/debroot`、`tpkg` → `tools/prefix`、
+  而 `blender.sh` 去 `$HOME/blender-env/` 找，**README 全程没设这些变量**。
+  按文档走必失败。
+  → `blender.sh` 默认值改为与两个安装脚本对齐（相对仓库根），
+  并给 `tpkg.mjs` 补上 `TPKG_PREFIX`。**零配置即可运行**。
+  → 新增 pitfalls #17
+- **`VK_ICD_FILENAMES="${ICD_FIXED:-$ICD_SRC}"` 兜底是死代码** ——
+  `ICD_FIXED` 恒有值，即使文件没生成也会指向不存在的路径。
+  → 改为 `[ -f "$ICD_FIXED" ]` 判断文件存在
+- **ICD 只生成一次** —— 重新解压 Mesa 或挪动 DEBROOT 后会一直用旧的错误路径。
+  → 改为**每次启动都重新生成**（成本极低）
+- **每次启动扫 400+ 目录拼库路径** —— → 结果缓存到 `.libpath.cache` 复用
+
+### ✅ 验证方式（这次是端到端做的）
+
+在干净目录复制仓库、只在默认位置放好数据目录，**不设任何环境变量**：
+
+```
+$ cd /tmp/clean-repo && sh scripts/blender.sh --version
+Blender 4.3.2                                    # ✅ 零配置
+
+$ sh scripts/blender.sh -b --python render.py
+Time: 00:07.38                                   # ✅ GPU 渲染
+
+$ echo "{\"ICD\":{\"library_path\":\"/WRONG/STALE.so\"}}" > tools/patched_icd.json
+$ sh scripts/blender.sh --version
+$ grep library_path tools/patched_icd.json
+  "library_path": ".../tools/debroot/usr/lib/.../libvulkan_freedreno.so"   # ✅ 自动修正
+```
+
+### 📌 关于"同类错误连犯两次"
+
+pitfalls #16（往 `/tmp` 写）和 #17（路径默认值不一致）是**同一个模式**：
+**"我这边能跑"被当成了"别人那边能跑"**。
+
+两者都不是知识错误，而是缺少一次**以陌生人身份走一遍**的验证 ——
+写文档的人知道所有隐含前提，读的时候大脑会自动补全。
+
+防御手段只有一条：**在干净环境里、不设任何环境变量、严格按文档走一遍。**
+
+
 ## v1.0.1 —— 外部评审修正
 
 感谢一位评审者指出的问题，本次修正了 5 处（含 1 处自相矛盾）：
