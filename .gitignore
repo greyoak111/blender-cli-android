@@ -1,0 +1,19 @@
+# Debian 用户空间（约 1.1GB，按 README 自行生成）
+debroot/
+debcache/
+stage/
+*.deb
+
+# 补丁版 Mesa（从 lfdevs/mesa-for-android-container 下载）
+mesa-android.tar.gz
+mesa-patched/
+
+# 渲染产物
+*.png
+*.jpg
+*.glb
+*.blend1
+
+# 解压中间产物
+*.tar
+*.tar.xz
