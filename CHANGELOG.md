@@ -1,5 +1,62 @@
 # Changelog
 
+## v1.0.3 —— 三轮评审修正
+
+第三轮评审指出 3 处，另有一处是评审**基于本文档的错误记述**提出的推断。
+
+### 🐛 修正
+
+- **库路径缓存忽略 `GLIBC_PREFIX`** —— 缓存里存的是整条 `LIB`（含 glibc 路径），
+  但失效判断只看 `$DEBROOT/usr/lib/aarch64-linux-gnu`。
+  改了 `GLIBC_PREFIX`、或新包往 `/usr/lib` 下加了子目录，都会继续用旧缓存**且不报错**。
+  → 缓存里**只存 Debian 侧扫描结果**，glibc 路径每次运行现拼；
+  失效判断同时看 `$DEBROOT/usr/lib`（新增子目录）和 `$A`（新增库）
+- **ICD 写入非原子** —— 两个 Blender 同时启动时，可能有一个读到写了一半的 JSON。
+  → 改为**先写临时文件再 `mv`**（同文件系统内原子），缓存文件同样处理
+
+### 📝 文档修正
+
+- **`CHANGELOG` 里把验证目录写成了 `/tmp/clean-repo`**，但**实际跑的是应用私有目录**（应用身份）。
+  这导致评审合理推断"验证是用 shell 身份做的，绕开了 `/tmp` 限制"。
+  一次有效的验证，被文档写得看起来无效。
+  → 修正为实际路径，并**显式标注执行身份**。新增 pitfalls #18
+
+### ✅ 验证（明确标注执行身份）
+
+```
+身份: uid=10361(u0_a361)  应用身份（非 shell）
+目录: /data/user/0/…/repo-clean  应用私有目录（非 /tmp）
+
+$ sh scripts/blender.sh --version
+Blender 4.3.2                                          # 零配置
+
+$ GLIBC_PREFIX=/…/fake-glibc sh scripts/blender.sh --version
+blender.sh[137]: /…/fake-glibc/glibc/lib/ld-linux-aarch64.so.1: not found
+                                                       # ✅ GLIBC_PREFIX 立即生效（缓存未拦）
+
+$ ls tools/ | grep patched_icd
+patched_icd.json                                       # ✅ 无 .tmp 残留（原子写入）
+```
+
+### 📌 同一模式已出现三次（pitfalls #16 / #17 / #18）
+
+| # | 表现 |
+|---|---|
+| 16 | 结论说 `/tmp` 写不进，步骤却往 `/tmp` 写 |
+| 17 | 三个组件的默认路径互不一致 |
+| 18 | 文档写的路径 ≠ 实际跑的路径 |
+
+**三次都不是知识错误，而是文档与实现/执行没有对齐。**
+
+防御手段：**把实际执行过的命令原样粘进文档，而不是事后凭记忆"描述"一遍。**
+
+### 🙏 关于评审
+
+本轮起在 [docs/credits.md](docs/credits.md) 中记录三轮外部代码评审（Claude）的贡献。
+评审也出现过两次错误推测（KGSL 权限、"Adreno 725" 成因），均经实测否定、未被写入。
+**评审的价值在于提出值得验证的问题，而非"说的一定对"。**
+
+
 ## v1.0.2 —— 二轮评审修正
 
 第二轮评审又指出 4 处，其中第 1 条与 v1.0.1 修的 `/tmp` 问题是**同一类错误**。
@@ -22,10 +79,11 @@
 
 ### ✅ 验证方式（这次是端到端做的）
 
-在干净目录复制仓库、只在默认位置放好数据目录，**不设任何环境变量**：
+在干净目录（**应用私有目录**，不是 `/tmp` —— 见下方说明）复制仓库、
+只在默认位置放好数据目录，**不设任何环境变量**：
 
 ```
-$ cd /tmp/clean-repo && sh scripts/blender.sh --version
+$ cd $APP_HOME/repo-clean && sh scripts/blender.sh --version   # 应用身份(uid=10361)
 Blender 4.3.2                                    # ✅ 零配置
 
 $ sh scripts/blender.sh -b --python render.py

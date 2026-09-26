@@ -55,18 +55,30 @@ fi
 #
 # Debian 的库不止放一个目录：/usr/lib、blas/、lapack/、pulseaudio/ …
 # 所以要扫一遍所有含 .so 的子目录。扫 400+ 个目录有开销，结果缓存复用。
+#
+# 缓存里**只存 Debian 侧的扫描结果**，glibc 路径每次运行时现拼 ——
+# 否则改了 GLIBC_PREFIX 之后会继续用旧的、指向错误路径的缓存，而且不报错。
+#
+# 失效判断看两个目录的 mtime：
+#   $B/usr/lib                  —— 新增了子目录（装了新包）会变
+#   $B/usr/lib/aarch64-linux-gnu —— 多架构目录里新增库会变
 LIBCACHE="$BASE/.libpath.cache"
-if [ -f "$LIBCACHE" ] && [ "$LIBCACHE" -nt "$A" ]; then
-  LIB=$(cat "$LIBCACHE")
+if [ -f "$LIBCACHE" ] && [ "$LIBCACHE" -nt "$B/usr/lib" ] && [ "$LIBCACHE" -nt "$A" ]; then
+  DEBLIB=$(cat "$LIBCACHE")
 else
-  LIB="$A:$GLIBC_PREFIX/glibc/lib"
+  DEBLIB="$A"
   for d in $(find "$B/usr/lib" "$B/lib" -type d 2>/dev/null); do
     case "$d" in *python3*|*lib-dynload*|*aarch64-linux-gnu) continue ;; esac
-    ls "$d"/*.so* >/dev/null 2>&1 && LIB="$LIB:$d"
+    ls "$d"/*.so* >/dev/null 2>&1 && DEBLIB="$DEBLIB:$d"
   done
   mkdir -p "$BASE" 2>/dev/null
-  echo "$LIB" > "$LIBCACHE" 2>/dev/null
+  # 同样用「临时文件 + mv」原子替换，避免并发启动时读到写了一半的缓存
+  if echo "$DEBLIB" > "$LIBCACHE.tmp.$$" 2>/dev/null; then
+    mv -f "$LIBCACHE.tmp.$$" "$LIBCACHE" 2>/dev/null
+  fi
 fi
+# glibc 路径现拼，永远反映当前的 GLIBC_PREFIX
+LIB="$DEBLIB:$GLIBC_PREFIX/glibc/lib"
 
 # ── Blender 资源与 Python ───────────────────────────────────────────
 # Debian 把资源拆到 /usr/share/blender，且 Python 用系统库。
@@ -103,7 +115,15 @@ if [ -f "$ICD_SRC" ]; then
   mkdir -p "$BASE" 2>/dev/null
   # 只替换路径开头的 "/usr/ → "$B/usr/，
   # 不能替换中间的 /usr/lib/ ，否则 aarch64-linux-gnu 会被重复拼接
-  sed "s|\"/usr/|\"$B/usr/|g" "$ICD_SRC" > "$ICD_FIXED" 2>/dev/null
+  #
+  # 先写临时文件再 mv —— mv 在同一文件系统上是原子的，
+  # 避免两个 Blender 同时启动时其中一个读到写了一半的 JSON。
+  ICD_TMP="$ICD_FIXED.tmp.$$"
+  if sed "s|\"/usr/|\"$B/usr/|g" "$ICD_SRC" > "$ICD_TMP" 2>/dev/null && [ -s "$ICD_TMP" ]; then
+    mv -f "$ICD_TMP" "$ICD_FIXED" 2>/dev/null || rm -f "$ICD_TMP" 2>/dev/null
+  else
+    rm -f "$ICD_TMP" 2>/dev/null
+  fi
 fi
 # 用文件是否存在来判断，不用 ${VAR:-default} ——
 # 后者在生成失败时仍会指向一个不存在的文件
