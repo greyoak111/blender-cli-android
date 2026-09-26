@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
-import * as xzNs from "xz-decompress";
+import * as xzNs from "./vendor/xz-decompress/dist/package/xz-decompress.js";
 const xz = xzNs.default ?? xzNs;
 
 const REPOS = [

@@ -4,6 +4,27 @@
 
 ---
 
+## 运行环境（地基）
+
+### 🌟 [woaiys3/deepseek-harness-android-app](https://github.com/woaiys3/deepseek-harness-android-app)
+
+> *"DeepSeek Harness 手机版：可直接安装的 Android APK，AI 免 Root 操作手机
+> （Shizuku/root 可选），文件编辑只需所有文件访问权限，前台保活 + AI 通知"*
+
+**本项目的所有工作都是在它里面完成的。** 没有这个 App，下面所有项目都无从谈起 ——
+它提供了 Shizuku 特权通道、文件访问、以及一个能在设备上跑起来的 DSH 运行时。
+
+| 它提供的能力 | 本项目用它做了什么 |
+|---|---|
+| Shizuku 特权通道（uid=2000 shell） | 装 APK、读系统属性、截图、访问受保护目录 |
+| 所有文件访问权限 | 直接读写 `/sdcard` 与应用私有目录 |
+| 运行时可执行文件 | 跑 node、glibc 二进制、Blender / Godot |
+| 前台保活 | 长时间渲染与编译不被打断 |
+
+**⭐302 · MIT** —— 本仓库的软硬件前提。
+
+---
+
 ## 决定性项目
 
 ### 🌟 [lfdevs/mesa-for-android-container](https://github.com/lfdevs/mesa-for-android-container)

@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.1 —— 认领运行环境 + 修一个坏掉的安装命令
+
+### 🐛 修复：tools/tpkg.mjs 在仓库里跑不起来
+
+它 import 的是裸模块名 `"xz-decompress"`，但仓库里只有 `vendor/` ——
+**按本仓库 README 走第一步就会 `ERR_MODULE_NOT_FOUND`。**
+
+原因是当初把脚本拷进仓库时，**从没在这个仓库里跑过一次**（本地跑得通是因为有 node_modules）。
+已改为与 debtool.mjs 一致的相对路径引用，并实测通过。
+
+> 这是"改了没跑"这一类错误的又一例，与 pitfalls #16/#17/#18 同源。
+
+### 📌 认领运行环境
+
+补上了此前完全缺失的一环 —— 本项目**所有工作都是在一个 App 里完成的**，
+但仓库里过去 0 处提及：
+
+- README 顶部加「运行环境」说明
+- [docs/credits.md](docs/credits.md) 新增**「运行环境（地基）」**一节，
+  置于所有其他鸣谢之前，说明它提供了什么、本项目用它做了什么
+- 鸣谢里指向配套工具集 [deepseek-harness-android-tools](https://github.com/greyoak111/deepseek-harness-android-tools)
+
+
 ## v1.1.0 —— 全套架构图
 
 用 [Archify](https://github.com/tt-a1i/archify) 画了三张图，放进 [docs/diagrams/](docs/diagrams/)。

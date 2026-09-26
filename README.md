@@ -4,6 +4,10 @@
 
 无 root、无 Termux、无 Linux 发行版环境 —— 只用设备自身的 Android + 一个 glibc 兼容层。
 
+> **运行环境**：本项目是在 **[DeepSeek Harness 手机版](https://github.com/woaiys3/deepseek-harness-android-app)**
+> 里跑起来的 —— 那个 App 提供了 Shizuku 特权通道与文件访问，才让底下这些成为可能。
+> 配套工具集见 **[deepseek-harness-android-tools](https://github.com/greyoak111/deepseek-harness-android-tools)**。
+
 ```
 $ blender --version
 Blender 4.3.2
@@ -272,14 +276,23 @@ Freedreno 有原生 OpenGL 驱动（`msm`），但它需要 **DRM 节点**（`/d
 
 ## 鸣谢
 
-本项目的 GPU 部分**完全建立在别人的工作之上**，特别感谢：
+**首先感谢运行环境本身** —— 没有下面这一个，其余的都无从谈起：
+
+- **[woaiys3/deepseek-harness-android-app](https://github.com/woaiys3/deepseek-harness-android-app)**
+  —— DeepSeek Harness 手机版。本项目的每一条命令、每一次调试，都是在它提供的
+  Shizuku 特权通道与文件访问里完成的。**这是地基。**
+
+本项目的 GPU 部分**完全建立在别人的工作之上**：
 
 - **[lfdevs/mesa-for-android-container](https://github.com/lfdevs/mesa-for-android-container)**
-  —— 为安卓容器里的 Adreno GPU 打造的 Mesa 补丁版。**没有它，GPU 加速不可能实现。**
+  —— 为安卓容器里的 Adreno GPU 打造的 Mesa 补丁版。本仓库实测它比发行版 Mesa 快约 1.4 倍。
 - **[alexvorxx/zink-xlib-termux](https://github.com/alexvorxx/zink-xlib-termux)**
   —— 提供了 Zink 在安卓上的构建参数，为 EGL 平台排查指明了方向。
 - **[tt-a1i/archify](https://github.com/tt-a1i/archify)**
   —— [docs/diagrams/](docs/diagrams/) 下的架构图由它生成。
+
+配套工具集：[greyoak111/deepseek-harness-android-tools](https://github.com/greyoak111/deepseek-harness-android-tools)
+（本仓库安装步骤里用到的 `tpkg.mjs` / `debtool.mjs` 都来自那里）。
 
 完整鸣谢见 [docs/credits.md](docs/credits.md)。
 
