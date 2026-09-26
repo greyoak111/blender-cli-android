@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "安卓平板开发闭环 · 零电脑",
+    "output": "dev-loop.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "主流水线",
+        "focus": [
+          "blender",
+          "gltf",
+          "godot",
+          "apk",
+          "tablet"
+        ],
+        "note": "从程序化建模到装回本机，五步全在同一台平板上。"
+      },
+      {
+        "id": "runtime",
+        "label": "运行时底座",
+        "focus": [
+          "runtime",
+          "blender",
+          "build",
+          "apk"
+        ],
+        "note": "两个底座分别托住创作端与产物端。"
+      },
+      {
+        "id": "loop",
+        "label": "闭环在哪",
+        "focus": [
+          "blender",
+          "godot",
+          "apk",
+          "tablet"
+        ],
+        "note": "产物装回生产它的同一台设备 —— 这就是闭环。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "blender",
+      "type": "backend",
+      "label": "Blender 4.3.2",
+      "sublabel": "EEVEE · GPU 渲染",
+      "pos": [
+        40,
+        210
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "程序化资产"
+    },
+    {
+      "id": "gltf",
+      "type": "database",
+      "label": "glTF 2.0",
+      "sublabel": "资产中间格式",
+      "pos": [
+        275,
+        210
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "godot",
+      "type": "backend",
+      "label": "Godot 4.7.2",
+      "sublabel": "场景 · 导出",
+      "pos": [
+        490,
+        210
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "含无头 CLI"
+    },
+    {
+      "id": "apk",
+      "type": "external",
+      "label": "APK",
+      "sublabel": "v2 + v3 签名",
+      "pos": [
+        730,
+        210
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "tablet",
+      "type": "frontend",
+      "label": "平板本机",
+      "sublabel": "安装即玩",
+      "pos": [
+        950,
+        210
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "闭环终点"
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "glibc 兼容层",
+      "sublabel": "Termux glibc + Debian arm64",
+      "pos": [
+        40,
+        430
+      ],
+      "size": [
+        200,
+        64
+      ],
+      "tag": "400+ 包"
+    },
+    {
+      "id": "build",
+      "type": "cloud",
+      "label": "构建与发布",
+      "sublabel": "aapt2 · apksigner · Actions",
+      "pos": [
+        640,
+        430
+      ],
+      "size": [
+        220,
+        64
+      ],
+      "tag": "统一签名"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "同一台安卓平板 · 全流程零电脑",
+      "wraps": [
+        "blender",
+        "gltf",
+        "godot",
+        "apk",
+        "tablet",
+        "runtime",
+        "build"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "blender-export",
+      "from": "blender",
+      "to": "gltf",
+      "label": "导出",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gltf-import",
+      "from": "gltf",
+      "to": "godot",
+      "label": "导入"
+    },
+    {
+      "id": "godot-build",
+      "from": "godot",
+      "to": "apk",
+      "label": "构建"
+    },
+    {
+      "id": "apk-install",
+      "from": "apk",
+      "to": "tablet",
+      "label": "安装",
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime-enables",
+      "from": "runtime",
+      "to": "blender",
+      "label": "提供运行时",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "build-packs",
+      "from": "build",
+      "to": "apk",
+      "label": "打包签名",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "创作端",
+      "items": [
+        "Blender 4.3.2 无头 CLI，EEVEE 走 GPU",
+        "Python API 程序化生成模型",
+        "导出 glTF 交给引擎，不经手工建模"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "引擎与产物",
+      "items": [
+        "Godot 4.7.2 编辑器 + 无头 CLI 双模式",
+        "导出 APK 并做 v2/v3 统一签名",
+        "GitHub Actions 在云端跑同一套构建脚本"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "闭环的意义",
+      "items": [
+        "产物装回生产它的同一台设备",
+        "改一行代码到上手试玩，不需要第二台机器",
+        "本地与 CI 的签名证书一致，可互相覆盖升级"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "代价与边界",
+      "items": [
+        "运行时依赖 glibc 兼容层，约 2.5GB 存储",
+        "Cycles 只能用 CPU，EEVEE 才能吃 GPU",
+        "补丁版 Mesa 会被后续 Debian 图形包覆盖"
+      ]
+    }
+  ]
+}

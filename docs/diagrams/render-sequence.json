@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "一次 EEVEE 渲染的调用序列",
+    "output": "render-sequence.html",
+    "viewBox": [1000, 790],
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "init", "label": "初始化", "focus": ["blender", "egl"], "note": "Blender 在后台模式也会为 EEVEE 建 EGL 上下文。" },
+      { "id": "translate", "label": "转译与提交", "focus": ["zink", "cache", "turnip"], "note": "OpenGL 调用被 Zink 翻译成 Vulkan，着色器走缓存。" },
+      { "id": "gpu", "label": "GPU 执行", "focus": ["turnip", "kgsl", "adreno"], "note": "Turnip 经 KGSL 把命令交给 Adreno，再逐层回传。" }
+    ]
+  },
+  "participants": [
+    { "id": "blender", "type": "backend", "label": "Blender", "sublabel": "EEVEE · 无头" },
+    { "id": "egl", "type": "backend", "label": "Mesa EGL", "sublabel": "surfaceless" },
+    { "id": "zink", "type": "backend", "label": "Zink", "sublabel": "GL → Vulkan" },
+    { "id": "cache", "type": "database", "label": "着色器缓存", "sublabel": "持久目录" },
+    { "id": "turnip", "type": "backend", "label": "Turnip", "sublabel": "补丁版 Mesa" },
+    { "id": "kgsl", "type": "external", "label": "/dev/kgsl-3d0", "sublabel": "内核通道" },
+    { "id": "adreno", "type": "backend", "label": "Adreno 730", "sublabel": "SM8475" }
+  ],
+  "segments": [
+    { "from": 150, "to": 292, "label": "初始化" },
+    { "from": 312, "to": 402, "label": "转译与提交" },
+    { "from": 422, "to": 700, "label": "GPU 执行与回读" }
+  ],
+  "messages": [
+    { "id": "egl-init", "from": "blender", "to": "egl", "y": 185, "label": "eglInitialize（surfaceless）", "variant": "emphasis" },
+    { "id": "ctx-ready", "from": "egl", "to": "blender", "y": 224, "label": "上下文就绪", "variant": "return" },
+    { "id": "draw-call", "from": "blender", "to": "zink", "y": 270, "label": "glDrawElements", "variant": "default" },
+    { "id": "shader-cache", "from": "zink", "to": "cache", "y": 336, "label": "查着色器缓存", "variant": "dashed" },
+    { "id": "vk-cmd", "from": "zink", "to": "turnip", "y": 383, "label": "vkCmdDraw", "variant": "emphasis" },
+    { "id": "ioctl", "from": "turnip", "to": "kgsl", "y": 428, "label": "ioctl", "variant": "default" },
+    { "id": "submit", "from": "kgsl", "to": "adreno", "y": 468, "label": "提交命令队列", "variant": "emphasis" },
+    { "id": "gpu-done", "from": "adreno", "to": "kgsl", "y": 505, "label": "执行完成", "variant": "return" },
+    { "id": "kgsl-back", "from": "kgsl", "to": "turnip", "y": 545, "label": "GPU 完成", "variant": "return" },
+    { "id": "frame-ready", "from": "turnip", "to": "zink", "y": 585, "label": "帧就绪", "variant": "return" },
+    { "id": "image-ready", "from": "zink", "to": "blender", "y": 625, "label": "图像就绪", "variant": "return" },
+    { "id": "read-pixels", "from": "blender", "to": "egl", "y": 663, "label": "读回像素并写 PNG", "variant": "dashed" }
+  ],
+  "activations": [
+    { "participant": "blender", "from": 176, "to": 676, "type": "backend" },
+    { "participant": "egl", "from": 180, "to": 232, "type": "backend" },
+    { "participant": "zink", "from": 262, "to": 634, "type": "backend" },
+    { "participant": "cache", "from": 330, "to": 394, "type": "database" },
+    { "participant": "turnip", "from": 375, "to": 594, "type": "backend" },
+    { "participant": "kgsl", "from": 420, "to": 554, "type": "external" },
+    { "participant": "adreno", "from": 460, "to": 514, "type": "backend" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "为什么要绕这么大一圈", "items": ["安卓只有 GLES 3.2，没有桌面 GL 4.3+，EEVEE 用不了", "Freedreno 的原生 GL 驱动需要 /dev/dri，本机不存在", "只剩一条路：GL → Vulkan 转译，再交给走 KGSL 的 Turnip"] },
+    { "dot": "cyan", "title": "两处容易踩空", "items": ["EGL 必须显式告知厂商驱动位置，否则只报 EGL_BAD_PARAMETER", "着色器缓存要固定到持久目录，否则每次重编译（首次慢约 1.4 倍）"] },
+    { "dot": "emerald", "title": "实测收益", "items": ["同场景 A/B：立方体 19×，猴头 5.0×", "软件渲染两个场景都约 34s，GPU 分别是 1.75s / 7.01s"] }
+  ]
+}

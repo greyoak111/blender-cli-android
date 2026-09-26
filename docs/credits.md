@@ -124,6 +124,28 @@
 | [Godot issue #123504](https://github.com/godotengine/godot/issues/123504) | 关联项目 `godot-cli-on-android` 中遇到的 ETC2/ASTC 问题 |
 | [vulkan-tools](https://github.com/KhronosGroup/Vulkan-Tools) | `vulkaninfo`，用于验证 Turnip 是否真的拿到了 GPU |
 
+### 🌟 [tt-a1i/archify](https://github.com/tt-a1i/archify)
+
+> *"Agent skill for beautiful, verifiable architecture, workflow, sequence,
+> data-flow, and lifecycle diagrams—self-contained HTML with motion and crisp export."*
+
+**本仓库 [docs/diagrams/](diagrams/) 下的三张架构图由它生成。**
+
+**具体借鉴了什么：**
+
+1. **图本身** —— 开发闭环、GPU 链路、渲染序列三张图，
+   及其可交互 HTML 与静态 SVG 两种形态
+2. **"可验证"的设计** —— 校验器不只报错，还给出**可执行的修复建议**
+   （例如"标签压在节点上，建议 `labelAt [773, 288]`"）。
+   本仓库的文档风格也受益于这个思路
+3. **规格与产物分离** —— JSON 是本体，HTML/SVG 是渲染结果，
+   交付时冻结规格字节并返回双哈希，可核验
+
+**⭐72k · MIT** —— 生成物同样遵循 MIT。
+
+> 安装说明见 [docs/diagrams/README.md](diagrams/README.md)。
+> 本仓库**未修改其任何代码**。
+
 ---
 
 ## 代码评审

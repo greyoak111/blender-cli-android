@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Blender GPU 渲染链路 · Android",
+    "output": "gpu-chain.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "full-chain",
+        "label": "完整链路",
+        "focus": [
+          "blender",
+          "egl",
+          "zink",
+          "turnip",
+          "kgsl",
+          "adreno"
+        ],
+        "note": "从 EEVEE 的渲染请求一路到 Adreno 730。"
+      },
+      {
+        "id": "translation",
+        "label": "转译层",
+        "focus": [
+          "egl",
+          "zink",
+          "turnip"
+        ],
+        "note": "安卓没有桌面 GL，OpenGL 必须转译成 Vulkan。"
+      },
+      {
+        "id": "config",
+        "label": "关键配置",
+        "focus": [
+          "envcfg",
+          "egl",
+          "turnip"
+        ],
+        "note": "四个环境变量缺一不可，最难的是 EGL 厂商驱动那一条。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "blender",
+      "type": "backend",
+      "label": "Blender 4.3.2",
+      "sublabel": "EEVEE · 无头",
+      "pos": [
+        40,
+        320
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "tag": "Debian arm64"
+    },
+    {
+      "id": "egl",
+      "type": "backend",
+      "label": "Mesa EGL",
+      "sublabel": "surfaceless",
+      "pos": [
+        245,
+        320
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "zink",
+      "type": "backend",
+      "label": "Zink",
+      "sublabel": "GL → Vulkan",
+      "pos": [
+        450,
+        320
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "tag": "转译层"
+    },
+    {
+      "id": "turnip",
+      "type": "backend",
+      "label": "Turnip",
+      "sublabel": "补丁版 Mesa 26.2",
+      "pos": [
+        655,
+        320
+      ],
+      "size": [
+        140,
+        60
+      ],
+      "tag": "Vulkan 1.4.353"
+    },
+    {
+      "id": "kgsl",
+      "type": "external",
+      "label": "/dev/kgsl-3d0",
+      "sublabel": "Qualcomm GPU 通道",
+      "pos": [
+        870,
+        320
+      ],
+      "size": [
+        140,
+        60
+      ],
+      "tag": "权限 666"
+    },
+    {
+      "id": "adreno",
+      "type": "backend",
+      "label": "Adreno 730",
+      "sublabel": "Snapdragon 8+ Gen 1",
+      "pos": [
+        1085,
+        320
+      ],
+      "size": [
+        140,
+        60
+      ],
+      "tag": "SM8475"
+    },
+    {
+      "id": "envcfg",
+      "type": "external",
+      "label": "环境变量",
+      "sublabel": "四个条件",
+      "pos": [
+        245,
+        150
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "缺一不可"
+    },
+    {
+      "id": "shadercache",
+      "type": "database",
+      "label": "着色器缓存",
+      "sublabel": "MESA_SHADER_CACHE_DIR",
+      "pos": [
+        450,
+        490
+      ],
+      "size": [
+        150,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "glibc 用户空间（应用进程）",
+      "wraps": [
+        "blender",
+        "egl",
+        "zink",
+        "turnip",
+        "envcfg",
+        "shadercache"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "内核 / 硬件",
+      "wraps": [
+        "kgsl",
+        "adreno"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "blender-to-egl",
+      "from": "blender",
+      "to": "egl",
+      "label": "EGL 上下文",
+      "variant": "emphasis"
+    },
+    {
+      "id": "egl-to-zink",
+      "from": "egl",
+      "to": "zink"
+    },
+    {
+      "id": "zink-to-turnip",
+      "from": "zink",
+      "to": "turnip",
+      "label": "Vulkan 调用"
+    },
+    {
+      "id": "turnip-to-kgsl",
+      "from": "turnip",
+      "to": "kgsl",
+      "label": "ioctl"
+    },
+    {
+      "id": "kgsl-to-adreno",
+      "from": "kgsl",
+      "to": "adreno"
+    },
+    {
+      "id": "envcfg-to-egl",
+      "from": "envcfg",
+      "to": "egl",
+      "label": "EGL 厂商驱动",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": -66
+    },
+    {
+      "id": "egl-vendor-note",
+      "from": "envcfg",
+      "to": "turnip",
+      "label": "VK_ICD_FILENAMES",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "zink-to-cache",
+      "from": "zink",
+      "to": "shadercache",
+      "label": "编译产物",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 58
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "最难的一道坎",
+      "items": [
+        "libglvnd 找不到 EGL 厂商驱动时只报 EGL_BAD_PARAMETER",
+        "该报错字面像参数错误，实为资源缺失",
+        "解法：__EGL_VENDOR_LIBRARY_FILENAMES"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "四个条件",
+      "items": [
+        "EGL_PLATFORM=surfaceless（无 /dev/dri）",
+        "GALLIUM_DRIVER=zink（GL 转译）",
+        "VK_ICD_FILENAMES=补丁版 Turnip",
+        "MESA_SHADER_CACHE_DIR=持久目录"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "实测性能",
+      "items": [
+        "立方体 640×480：33.51s → 1.75s（19×）",
+        "猴头 640×480：35.05s → 7.01s（5.0×）",
+        "加速比随场景变化，跨场景比较无意义"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "为什么必须转译",
+      "items": [
+        "安卓只有 GLES 3.2，没有桌面 GL 4.3+",
+        "Freedreno 原生 GL 驱动需要 /dev/dri，本机不存在",
+        "所以只能走 Vulkan + Zink 转译"
+      ]
+    }
+  ]
+}

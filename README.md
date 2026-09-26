@@ -22,6 +22,15 @@ Time: 00:22.39                          # 800×600 @ 128 采样
 
 ---
 
+## 全景
+
+![安卓平板开发闭环](docs/diagrams/dev-loop.svg)
+
+> 从程序化建模到装回本机，**五步全在同一台平板上**。
+> [交互版](docs/diagrams/dev-loop.html) · [规格 JSON](docs/diagrams/dev-loop.json) · [全部图](docs/diagrams/)
+
+---
+
 ## 成果
 
 | 能力 | 状态 | 实测环境 |
@@ -50,6 +59,8 @@ Time: 00:22.39                          # 800×600 @ 128 采样
 
 ## 核心：GPU 链路是怎么打通的
 
+![GPU 渲染链路](docs/diagrams/gpu-chain.svg)
+
 ```
 Blender → EGL(Mesa surfaceless) → Zink(GL→Vulkan 转译)
         → Vulkan loader → Turnip(补丁版) → /dev/kgsl-3d0 → Adreno GPU
@@ -73,7 +84,15 @@ export VK_ICD_FILENAMES=/path/to/patched_icd.json
 ```
 
 > 第 1 条是最难的坎。缺了它只会看到 `EGL_BAD_PARAMETER` —— 一个**完全误导性**的报错。
-> 详见 [docs/gpu-breakthrough.md](docs/gpu-breakthrough.md)
+> 详见 [docs/gpu-breakthrough.md](docs/gpu-breakthrough.md) ·
+> [交互版链路图](docs/diagrams/gpu-chain.html)
+
+### 一次渲染的完整往返
+
+![EEVEE 渲染调用序列](docs/diagrams/render-sequence.svg)
+
+从 `eglInitialize` 到读回像素，中间经过转译、着色器缓存、KGSL ioctl。
+[交互版](docs/diagrams/render-sequence.html)
 
 ---
 
@@ -243,10 +262,11 @@ Freedreno 有原生 OpenGL 驱动（`msm`），但它需要 **DRM 节点**（`/d
 
 | 文档 | 内容 |
 |---|---|
-| [docs/gpu-breakthrough.md](docs/gpu-breakthrough.md) | **GPU 打通全过程** —— 从 EGL 失败到 19 倍加速的完整排查 |
-| [docs/pitfalls.md](docs/pitfalls.md) | 14 个坑的完整清单与根因分析 |
+| [docs/gpu-breakthrough.md](docs/gpu-breakthrough.md) | **GPU 打通全过程** —— 从 EGL 失败到 A/B 对照证明的完整排查 |
+| [docs/pitfalls.md](docs/pitfalls.md) | **18 个坑**的完整清单与根因分类 |
 | [docs/background.md](docs/background.md) | 背景、方法论、以及为什么走这条路 |
-| [docs/credits.md](docs/credits.md) | **鸣谢** —— 借鉴的开源项目 |
+| [docs/credits.md](docs/credits.md) | **鸣谢** —— 借鉴的开源项目与外部代码评审 |
+| [docs/diagrams/](docs/diagrams/) | **架构图** —— 开发闭环 / GPU 链路 / 渲染序列（SVG + 交互 HTML + 规格 JSON） |
 
 ---
 
@@ -258,6 +278,8 @@ Freedreno 有原生 OpenGL 驱动（`msm`），但它需要 **DRM 节点**（`/d
   —— 为安卓容器里的 Adreno GPU 打造的 Mesa 补丁版。**没有它，GPU 加速不可能实现。**
 - **[alexvorxx/zink-xlib-termux](https://github.com/alexvorxx/zink-xlib-termux)**
   —— 提供了 Zink 在安卓上的构建参数，为 EGL 平台排查指明了方向。
+- **[tt-a1i/archify](https://github.com/tt-a1i/archify)**
+  —— [docs/diagrams/](docs/diagrams/) 下的架构图由它生成。
 
 完整鸣谢见 [docs/credits.md](docs/credits.md)。
 

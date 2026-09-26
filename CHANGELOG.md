@@ -1,5 +1,43 @@
 # Changelog
 
+## v1.1.0 —— 全套架构图
+
+用 [Archify](https://github.com/tt-a1i/archify) 画了三张图，放进 [docs/diagrams/](docs/diagrams/)。
+
+| 图 | 类型 | 讲什么 |
+|---|---|---|
+| [开发闭环](docs/diagrams/dev-loop.svg) | architecture | 从程序化建模到装回本机，五步全在同一台平板上 |
+| [GPU 渲染链路](docs/diagrams/gpu-chain.svg) | architecture | Blender → EGL → Zink → Turnip → KGSL → Adreno |
+| [渲染调用序列](docs/diagrams/render-sequence.svg) | sequence | 一次 EEVEE 渲染的完整往返（12 条消息） |
+
+### 每张图三种形态
+
+- **SVG**（约 55KB）—— README 内联显示
+- **HTML**（约 620KB）—— 可交互：缩放 / 搜索 / 聚焦 / 关系追踪 / 明暗主题 / 引导章节
+- **JSON**（4–6KB）—— 规格本体，改它再渲染
+
+三张均通过 **9/9 检查、0 错误 0 警告**（showcase 级），交付返回规格与产物双哈希。
+
+### 顺带填的两个坑
+
+Archify 的 HTML 用外部 CSS 类渲染，**SVG 本身不带样式**，直接抠出来是白图。所以写了
+`docs/diagrams/extract-svg.mjs`：
+
+1. **过滤 CSS** —— 只保留 SVG 用到的类（181KB → 38KB）
+2. **XML 合规化** —— HTML 允许无值属性（`<text data-detail-anchor x="1">`），
+   **XML 不允许**。不补 `=""` 的话浏览器直接报解析错误，**整张图只剩边框没有文字**
+3. **锁定主题 + 补背景** —— GitHub 不认 CSS 变量切换
+
+第 2 条是**真的踩到了**：第一版 SVG 在浏览器里打开就是一堆 "Unexpected token inside
+open tag"，节点全丢。另配 `check-svg.mjs` 做静态检查（扫描时要跳过引号内容与文本内容，
+否则节点文字 `Blender`/`EEVEE` 会被当成属性名报一堆假阳性）。
+
+### 📌 又一次"先验证再交付"
+
+这次没有改代码，但仍然按老规矩做：**生成 → 浏览器实测 → 才发现 XML 错误**。
+如果只看 `file` 命令说"是个 SVG"就交付，用户拿到的会是一张只有边框的图。
+
+
 ## v1.0.4 —— 缓存校验改为全覆盖（不在文档里留尾巴）
 
 第四轮评审提到一个边缘情况：缓存是否过期只看 `$B/usr/lib` 和 `$A`，
