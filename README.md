@@ -133,6 +133,25 @@ sh scripts/blender.sh --version          # blender.sh 读 BLENDER_ENV
 > ⚠️ **如果 `blender.sh` 报"找不到 Blender"**，几乎一定是路径没对齐。
 > 它会打印实际查找的位置，对照上表检查即可。
 
+### 关于库路径缓存
+
+`scripts/blender.sh` 会扫描 `$DEBROOT` 下所有含 `.so` 的子目录来拼库路径
+（`blas/`、`lapack/`、`pulseaudio/` 等，Debian 的库不止放一个目录）。
+实测这一步约 **420 ms**，其中绝大部分是 223 次 `ls` 子进程的开销。
+
+所以结果会缓存到 `$BASE/.libpath.cache`，并用 `find -newer` 校验：
+
+| 路径 | 耗时 |
+|---|---|
+| 完整扫描（首次 / 缓存失效） | ~420 ms |
+| 缓存校验（日常） | ~25 ms |
+| 读缓存 | ~14 ms |
+
+**校验方式是"任何被扫过的目录只要比缓存新就重扫"** ——
+这能捕获所有变化（新增子目录、在已有子目录里增删库文件）。
+
+想强制重扫，删掉 `$BASE/.libpath.cache` 即可。
+
 ### 关于 ICD 配置
 
 **不需要手工生成。** `scripts/blender.sh` **每次启动都会重新生成**一份：

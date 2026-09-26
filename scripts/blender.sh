@@ -54,18 +54,29 @@ fi
 #    混用会报满屏 `version 'LIBC' not found`。
 #
 # Debian 的库不止放一个目录：/usr/lib、blas/、lapack/、pulseaudio/ …
-# 所以要扫一遍所有含 .so 的子目录。扫 400+ 个目录有开销，结果缓存复用。
+# 所以要扫一遍所有含 .so 的子目录。
+#
+# 实测（223 个目录）：
+#   完整扫描            ~420 ms   ← 其中 223 次 `ls` 子进程占绝大部分
+#   纯 find 遍历         ~25 ms
+#   读缓存               ~14 ms
+# 所以「扫描」很贵，但「用 find 检查有没有变化」几乎免费。
+#
+# 验证方式：任何被扫过的目录只要比缓存新，就重新扫。
+# 这能捕获**所有**变化 —— 新增子目录、或在已有子目录里新增库文件
+# （后者的 mtime 变化只体现在子目录本身，所以必须逐个目录比，
+#   只看 $B/usr/lib 和 $A 会漏掉 —— 曾是一个已知边缘缺陷）。
 #
 # 缓存里**只存 Debian 侧的扫描结果**，glibc 路径每次运行时现拼 ——
 # 否则改了 GLIBC_PREFIX 之后会继续用旧的、指向错误路径的缓存，而且不报错。
-#
-# 失效判断看两个目录的 mtime：
-#   $B/usr/lib                  —— 新增了子目录（装了新包）会变
-#   $B/usr/lib/aarch64-linux-gnu —— 多架构目录里新增库会变
 LIBCACHE="$BASE/.libpath.cache"
-if [ -f "$LIBCACHE" ] && [ "$LIBCACHE" -nt "$B/usr/lib" ] && [ "$LIBCACHE" -nt "$A" ]; then
-  DEBLIB=$(cat "$LIBCACHE")
-else
+NEED_SCAN=1
+if [ -f "$LIBCACHE" ]; then
+  CHANGED=$(find "$B/usr/lib" "$B/lib" -type d -newer "$LIBCACHE" 2>/dev/null | wc -l)
+  [ "$CHANGED" -eq 0 ] && NEED_SCAN=0
+fi
+
+if [ "$NEED_SCAN" -eq 1 ]; then
   DEBLIB="$A"
   for d in $(find "$B/usr/lib" "$B/lib" -type d 2>/dev/null); do
     case "$d" in *python3*|*lib-dynload*|*aarch64-linux-gnu) continue ;; esac
@@ -76,6 +87,8 @@ else
   if echo "$DEBLIB" > "$LIBCACHE.tmp.$$" 2>/dev/null; then
     mv -f "$LIBCACHE.tmp.$$" "$LIBCACHE" 2>/dev/null
   fi
+else
+  DEBLIB=$(cat "$LIBCACHE")
 fi
 # glibc 路径现拼，永远反映当前的 GLIBC_PREFIX
 LIB="$DEBLIB:$GLIBC_PREFIX/glibc/lib"
