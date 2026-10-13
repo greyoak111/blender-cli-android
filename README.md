@@ -355,3 +355,43 @@ typst compile notes.typ notes.pdf
 MIT（本仓库自身的脚本与文档）。
 第三方组件遵循各自许可：Blender 为 GPL，Mesa 为 MIT，Debian 各包遵循其自身许可。
 本仓库**不重新分发**这些二进制，只提供获取与配置的方法。
+
+---
+
+## 备注：安装步骤的上游漂移
+
+> 2026-10-13 于另一台设备（骁龙 8 Gen 3 / Adreno 750）复核时补充。
+> 上面「[安装](#安装)」一节**保持原样未改**，这里只记录这次复核发现的问题。
+
+### 问题：第 1 步里的两个包已经不在了
+
+```
+⚠️  索引里没有: vulkan-tools-glibc
+⚠️  索引里没有: vulkan-icd-loader-glibc
+```
+
+Termux 的 glibc 仓库（`packages-cf.termux.dev/apt/termux-glibc/`）是滚动更新的，
+包名和存在性都会变。文档里写死具体包名，就会随上游漂移而失效。
+
+### 实测结论：这两样都不需要装
+
+| 需要的东西 | 实际从哪来 |
+|---|---|
+| `libvulkan.so.1`（Khronos 加载器） | **已经在第 2 步 `blender` 的依赖闭包里** —— 实测 1.4.309，自动装好 |
+| `vulkaninfo`（诊断用） | 用 Debian 的：`node tools/debtool.mjs install vulkan-tools` |
+
+也就是说，**第 1 步实际只需要 `glibc`**（若宿主环境已自带 glibc 运行时，这步还可以再省）。
+
+### ⚠️ 一个连带的坑
+
+`libEGL.so.1` 确实**不在** `blender` 的依赖闭包里，需要单独装 ——
+但 `install libegl1` 会顺带拉进 **`libegl-mesa0` + `mesa-libgallium`**，
+正是 [pitfalls #14](docs/pitfalls.md) 那个覆盖问题的精确触发条件。
+
+**装完必须重新解包补丁版 Mesa**（把第 3 步再跑一遍），否则 GPU 会悄悄退回发行版 Mesa。
+
+---
+
+完整记录见 [docs/pitfalls.md #24](docs/pitfalls.md)。
+这次复核另外新踩到的 5 条（#19–#23）也一并补进了那份清单，
+其中 #19（`LD_LIBRARY_PATH` 毒死 bionic 工具）值得单独看一眼。

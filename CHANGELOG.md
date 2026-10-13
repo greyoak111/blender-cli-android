@@ -33,12 +33,14 @@ rm -f file            → 文件还在
 由此提炼出一条可复用的判断：**"某个工具在脚本里失效、单独跑却正常"
 → 优先怀疑环境变量污染，而不是工具本身。**
 
-> 另外第 24 条指出了 README 安装步骤的一个**现存问题**：
-> `vulkan-icd-loader-glibc` / `vulkan-tools-glibc` 已从 Termux 的 glibc 仓库下架，
-> 照 README 第 1 步走会拿到一堆 `⚠️ 索引里没有`。
-> 实测这两样**都不需要** —— `libvulkan.so.1` 已经在 `blender` 的依赖闭包里自动装好，
-> 诊断工具用 Debian 的 `vulkan-tools` 即可。
-> 本次**只记录、未改动 README**，留待确认。
+### 📌 README 末尾新增备注
+
+第 24 条指出的 README 安装步骤问题（`vulkan-icd-loader-glibc` /
+`vulkan-tools-glibc` 已从 Termux 的 glibc 仓库下架，照第 1 步走会拿到一堆
+`⚠️ 索引里没有`），在 README **末尾**加了一节备注说明。
+
+**原文一字未改** —— 备注是补充，不是替换：现有的安装步骤在它写下的那个时间点
+是对的，直接改写会让"当时为什么这么写"这段信息消失。
 
 
 ## v1.1.1 —— 认领运行环境 + 修一个坏掉的安装命令
