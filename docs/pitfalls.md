@@ -1,7 +1,11 @@
 # 踩坑清单
 
-在 Android 上跑通 Blender 的过程中踩过的 14 个坑，按实际遇到顺序排列。
+在 Android 上跑通 Blender 的过程中踩过的 24 个坑，按实际遇到顺序排列。
 每一条都包含**现象、根因、解法**，以及为什么值得记下来。
+
+> 1–18 条来自最初的开发环境。19–24 条来自在**另一台设备、另一套宿主环境**上
+> 重新走一遍全流程时的记录 —— 前 18 条基本都复现了，另外多出这几条，
+> 且都与「宿主环境本身也是一个安卓应用」这个前提有关。
 
 ---
 
@@ -510,19 +514,222 @@ Blender 4.3.2                      # ✅ 零配置跑通
 > 而不是重新"描述"一遍执行过程。
 
 
+## 19. ⭐ `LD_LIBRARY_PATH` 会毒死同一脚本里所有 bionic 工具
+
+**现象**：完全不像是"进程起不来"，所以极难往这个方向想：
+
+```
+sed "..." > file      → file 是 0 字节     （重定向建了文件，sed 没跑起来）
+rm -f file            → 文件还在
+printf ... > file     → 0 字节
+```
+
+看起来像「sed 坏了」「文件系统只读」。实际上同一条 `sed` 命令单独跑完全正常，
+只在那个脚本里失效。
+
+**根因**：脚本为了让被启动的 glibc 进程及其子进程也能找到库，写了：
+
+```sh
+export LD_LIBRARY_PATH="$DEBROOT/usr/lib/aarch64-linux-gnu:$GLIBC/lib:..."
+```
+
+但脚本**后面还要调用 `sed` / `rm` / `find` / `ls` / `mkdir`** ——
+这些是**安卓自带的 bionic 程序**。bionic 链接器会优先在 `LD_LIBRARY_PATH`
+里找到 glibc 的 `libc.so.6`，符号版本对不上（bionic 要 `LIBC`/`LIBC_N`，
+glibc 只有 `GLIBC_2.x`），于是这些程序**静默启动失败**。
+
+而失败信息往往被 `2>/dev/null` 吞掉了 —— 只留下"什么都没发生"。
+
+**解法**：`LD_LIBRARY_PATH` **只在最后 `exec` 那一行导出**，
+位置必须晚于所有 bionic 工具调用：
+
+```sh
+# 前面所有 find / ls / sed / rm / mkdir 都跑完了……
+export LD_LIBRARY_PATH="$LIB"
+exec "$LDSO" --library-path "$LIB" "$B/usr/bin/blender" "$@"
+```
+
+> **`exec env LD_LIBRARY_PATH=... cmd` 是错的** —— `env` 自己也是 bionic 程序，
+> 一样会带着这个变量启动、一样会死。别用这个"看起来更干净"的写法。
+
+> 另外：`ld.so --library-path` 本来就同时管住主程序和后续的 `dlopen`，
+> **并不真的需要 `LD_LIBRARY_PATH`**。它在这里的唯一价值是给被启动进程
+> 再开一层保险。想清楚这一点，就不会急着 `export` 了。
+
+> **教训**：这是第 5 条（两套 C 运行时不能混）的**第三个变体**，
+> 而且是最隐蔽的一个 —— 前两个变体的报错都明说 `version 'LIBC' not found`，
+> 这一次连报错都没有。**"某个工具在脚本里失效、单独跑却正常"
+> 这个模式，优先怀疑环境变量污染，而不是工具本身。**
+
+---
+
+## 20. Termux 的 `LD_PRELOAD` 会被 glibc 的 ld.so 继承
+
+**现象**：Blender 启动即失败：
+
+```
+libc.so.6: version `LIBC' not found
+  (required by /data/.../usr/lib/libtermux-exec-ld-preload.so)
+```
+
+**根因**：Termux 系环境会把 `libtermux-exec-ld-preload.so` 放进 `LD_PRELOAD`
+（用来改写脚本 shebang）。它是 **bionic** 库，而 glibc 的 ld.so **照单全收**，
+加载后自然对不上符号版本。
+
+**解法**：启动器开头一刀切断：
+
+```sh
+unset LD_PRELOAD LD_AUDIT LD_DEBUG
+```
+
+> 这是第 5 条的**第二个变体**：上一次是库**搜索路径**里混进了 bionic，
+> 这一次是**注入变量**里带进了 bionic。共同点还是"两套运行时互相看见"。
+> 环境变量清单不一样，排查时要一起想。
+
+---
+
+## 21. 库路径缓存必须绑定根目录
+
+**现象**：包体整体搬个位置（或改个名字），Blender 立刻找不到 Debian 的库。
+明明缓存失效校验（`find -newer`）在，却什么都没检测出来。
+
+**根因**：`scripts/blender.sh` 把扫描出来的库路径缓存成**绝对路径**。
+包体搬家时，缓存文件**跟着一起搬** —— mtime 没变、子目录也没变新，
+`find -newer` 的校验自然全部通过，于是继续沿用一堆指向旧路径的废条目。
+
+**解法**：把根目录写进缓存的第一行，对不上就强制重扫：
+
+```sh
+CACHE="$ROOT/data/.libpath.cache"
+NEED_SCAN=1
+if [ -f "$CACHE" ] && [ "$(head -n1 "$CACHE" 2>/dev/null)" = "$ROOT" ]; then
+  CHANGED=$(find "$B/usr/lib" "$B/lib" -type d -newer "$CACHE" 2>/dev/null | wc -l)
+  [ "$CHANGED" -eq 0 ] && NEED_SCAN=0
+fi
+# …扫描…
+printf '%s\n%s\n' "$ROOT" "$DEBLIB" > "$CACHE.tmp.$$"
+```
+
+> **教训**：`find -newer` 只能发现**内容变化**，发现不了**路径变化** ——
+> 因为缓存自己也在动。"相对路径推导 + 绝对路径缓存"这个组合天生有这个洞。
+
+---
+
+## 22. `/dev/dri` 节点存在 ≠ 能用
+
+第 1 条判断依据的补充。原文档里写的是「`/dev/dri/*` 不存在 →  Freedreno
+原生 GL 驱动用不了」，这在某些设备上会**误判**：
+
+```
+$ ls -ld /dev/dri
+drwxr-xr-x  root root  /dev/dri
+$ ls -l /dev/dri/renderD128
+crw-rw-rw-  root graphics  /dev/dri/renderD128     ← 节点存在，权限还很宽松
+$ ls /dev/dri
+Permission denied                                   ← 但目录不可列
+```
+
+**根因**：SELinux 拒绝 `untrusted_app` **搜索 `/dev/dri` 目录**。
+权限位（DAC）全通过，MAC 这一关照样拦死 —— 与第 12 条同源。
+
+**解法**：判断能不能用，**必须真的 `open()` 一次**，不能只看节点在不在、权限位宽不宽：
+
+```c
+fd = open("/dev/dri/renderD128", O_RDWR);
+// 成功 → 这条路线可用；EACCES → 死了，别浪费时间
+```
+
+**实测对照**（同一台设备、普通应用身份）：
+
+| 节点 | 结果 |
+|---|---|
+| `/dev/kgsl-3d0` | `O_RDWR` **成功** —— GPU 的唯一入口 |
+| `/dev/dri/renderD128` | `O_RDWR` **EACCES** —— 节点在，但进不去 |
+| `/dev/dma_heap/system` | `O_RDONLY` 成功，`O_RDWR` 被拒 |
+
+> **教训**：`ls -l` 只能看到 DAC。"这个文件我能不能用"这个问题，
+> 在安卓上只有实际打开一次才算数。
+
+---
+
+## 23. Blender 的 `--gpu-backend vulkan` 会崩
+
+**现象**：`blender --help` 里明写着
+
+```
+--gpu-backend  Force to use a specific GPU backend.
+               Valid options: 'opengl' or 'vulkan' (experimental).
+```
+
+既然 Turnip 已经是能用的 Vulkan 设备，很自然会想**绕开 Zink 转译、直接上 Vulkan**。
+实测：Vulkan 实例能建、Turnip 能枚举到设备、`TU_DEBUG` 打印
+`Found compatible device '/dev/kgsl-3d0'` —— **然后一渲染就崩**，
+崩溃点落在 Python eval 栈里。
+
+**根因**：4.3 的 Vulkan 后端是实验特性，EEVEE 这条路径尚未可用。
+"能创建实例"和"能出图"之间还差很远。
+
+**解法**：老实用 Zink 转译。这也回过头解释了为什么整条链路要以 Zink 为核心。
+
+> **教训**：`--help` 里列出的选项 ≠ 能用的功能，尤其标着 *(experimental)* 时。
+> 判断依据仍然是"跑一遍看结果"，不是"看它写着支持"。
+
+---
+
+## 24. 仓库里的包会消失（README 第一步今天跑不通）
+
+**现象**：照 README 第 1 步走：
+
+```sh
+node tools/tpkg.mjs install glibc openjdk-17 \
+  vulkan-tools-glibc mesa-vulkan-icd-freedreno-glibc vulkan-icd-loader-glibc
+```
+
+报一堆 `⚠️ 索引里没有: xxx`。实测 Termux 的 glibc 仓库里，
+**`vulkan-icd-loader-glibc` 和 `vulkan-tools-glibc` 已经不在了**。
+
+**根因**：Termux 的 glibc 仓库（`packages-cf.termux.dev/apt/termux-glibc/`）
+是滚动更新的，包名和存在性都会变。文档写死了具体包名，就会随上游漂移而失效。
+
+**解法**：Vulkan 加载器不用从 Termux 拿 —— **Debian 侧本来就有**：
+
+```sh
+node tools/debtool.mjs install libvulkan1 vulkan-tools
+```
+
+实测 `libvulkan.so.1`（1.4.309）**其实已经在 `blender` 的依赖闭包里**
+自动装进来了，只是 `libEGL.so.1` 不在（那个要 `libegl1`）。
+所以第 1 步其实只需要 `glibc`；诊断用的 `vulkaninfo` 走 Debian 的 `vulkan-tools` 即可。
+
+> ⚠️ 但注意：`install libegl1` 会顺带拉进 **`libegl-mesa0` + `mesa-libgallium`**，
+> 也就是第 14 条那个覆盖问题的精确触发条件 —— 装了之后**必须重新解包补丁版 Mesa**。
+
+> **教训**：文档里写死上游包名 = 埋一个定时炸弹。
+> 写"需要哪一类能力"比写"装哪个包"更耐久；真要写包名，
+> 就得接受它需要定期复核。（与第 16/17/18 条的"文档自洽"是同一族问题，
+> 只是这次漂移的不是文档内部，而是**文档与外部世界**。）
+
+
 ## 汇总
 
 | 类别 | 坑号 | 共性问题 |
 |---|---|---|
 | **库路径布局** | 1, 4, 6 | Debian 的库不止放一个目录 |
 | **`.so` vs `.so.N`** | 2, 3, 11 | 链接脚本 ≠ 动态库 |
-| **两套 C 运行时** | 5 | bionic 与 glibc 绝不能混 |
+| **两套 C 运行时** | 5, 19, 20 | bionic 与 glibc 绝不能互相看见（搜索路径 / 注入变量） |
 | **非标准根目录** | 7, 8, 13 | 编译期路径假设 `/` 是根 |
 | **发行版构建裁剪** | 9, 10 | 可选组件缺失 / Recommends 依赖 |
-| **安卓安全模型** | 12 | SELinux 比 DAC 更靠后 |
-| **包管理冲突** | 14 | 覆盖安装会被修回 |
-| **缓存/持久化** | 15 | 默认缓存路径在非标准环境下不可写 |
+| **安卓安全模型** | 12, 22 | SELinux 比 DAC 更靠后；权限位通过 ≠ 能用 |
+| **包管理冲突** | 14, 24 | 覆盖安装会被修回 / 上游包会消失 |
+| **缓存与持久化** | 15, 21 | 默认缓存路径不可写；失效校验漏掉路径变化 |
 | **文档自洽性** | 16, 17, 18 | 结论↔步骤 / 组件↔组件 / 文档↔实际执行，三处不一致 |
+| **实验特性不可信** | 23 | `--help` 里列了 ≠ 能用 |
 
-**其中第 5 条和第 13 条是最有价值的** —— 它们分别对应
-"两套运行时混用"和"报错误导"这两类通用陷阱。
+**最有价值的三条：第 5、13、19。**
+
+- **第 5 条**（含 19/20 两个变体）—— 两套 C 运行时混用。变体一次比一次隐蔽：
+  先是报错的库路径、再是没报错的注入变量、最后是**连报错都没有**的
+  "工具静默失效"。
+- **第 13 条** —— 报错误导。`EGL_BAD_PARAMETER` 看着像参数问题，实为找不到驱动。
+- **第 19 条** —— 环境变量污染。**"某个工具在脚本里失效、单独跑却正常"**
+  这个模式值得单独记住，它会以完全不像环境问题的样子出现。

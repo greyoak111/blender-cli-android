@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.2.0 —— 第二台设备复现：6 条新坑
+
+在**另一台设备（骁龙 8 Gen 3 / Adreno 750）、另一套宿主环境**上重新走了一遍
+全流程。[docs/pitfalls.md](docs/pitfalls.md) 新增 **19–24 条**。
+
+前 18 条基本都复现了（说明这份清单的可移植性没问题），
+另外多出 6 条，且都与「宿主环境本身也是一个安卓应用」这个前提有关：
+
+| # | 一句话 | 类别 |
+|---|---|---|
+| [19](docs/pitfalls.md) | **`LD_LIBRARY_PATH` 会毒死同一脚本里所有 bionic 工具** | 两套运行时 ⭐ |
+| [20](docs/pitfalls.md) | Termux 的 `LD_PRELOAD` 会被 glibc 的 ld.so 继承 | 两套运行时 |
+| [21](docs/pitfalls.md) | 库路径缓存必须绑定根目录 | 缓存 |
+| [22](docs/pitfalls.md) | `/dev/dri` 节点存在 ≠ 能用 | SELinux |
+| [23](docs/pitfalls.md) | Blender 的 `--gpu-backend vulkan` 会崩 | 实验特性 |
+| [24](docs/pitfalls.md) | 仓库里的包会消失（README 第一步今天跑不通） | 上游漂移 |
+
+**其中第 19 条是这次最有价值的发现**，它是第 5 条（两套 C 运行时不能混）
+的**第三个变体，也是最隐蔽的一个**：
+
+```
+sed "..." > file      → file 是 0 字节
+rm -f file            → 文件还在
+```
+
+看起来像「sed 坏了」，实际是脚本里 `export LD_LIBRARY_PATH=<glibc 目录>` 之后，
+后面调用的 `sed`/`rm`/`find`（都是 bionic 程序）优先加载到了 glibc 的 `libc.so.6`，
+符号版本对不上，**静默启动失败**。前两个变体至少会报
+`version 'LIBC' not found`，这一次**连报错都没有**。
+
+由此提炼出一条可复用的判断：**"某个工具在脚本里失效、单独跑却正常"
+→ 优先怀疑环境变量污染，而不是工具本身。**
+
+> 另外第 24 条指出了 README 安装步骤的一个**现存问题**：
+> `vulkan-icd-loader-glibc` / `vulkan-tools-glibc` 已从 Termux 的 glibc 仓库下架，
+> 照 README 第 1 步走会拿到一堆 `⚠️ 索引里没有`。
+> 实测这两样**都不需要** —— `libvulkan.so.1` 已经在 `blender` 的依赖闭包里自动装好，
+> 诊断工具用 Debian 的 `vulkan-tools` 即可。
+> 本次**只记录、未改动 README**，留待确认。
+
+
 ## v1.1.1 —— 认领运行环境 + 修一个坏掉的安装命令
 
 ### 🐛 修复：tools/tpkg.mjs 在仓库里跑不起来
