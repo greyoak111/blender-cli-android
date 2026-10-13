@@ -534,11 +534,22 @@ export LD_LIBRARY_PATH="$DEBROOT/usr/lib/aarch64-linux-gnu:$GLIBC/lib:..."
 ```
 
 但脚本**后面还要调用 `sed` / `rm` / `find` / `ls` / `mkdir`** ——
-这些是**安卓自带的 bionic 程序**。bionic 链接器会优先在 `LD_LIBRARY_PATH`
-里找到 glibc 的 `libc.so.6`，符号版本对不上（bionic 要 `LIBC`/`LIBC_N`，
-glibc 只有 `GLIBC_2.x`），于是这些程序**静默启动失败**。
+这些是**安卓自带的 bionic 程序**，它们的依赖名就叫 `libc.so`（还有 `libm.so`、`libdl.so`）。
+而 Termux 的 glibc 目录里恰好也有**同名**的 `libc.so` / `libm.so` / `libdl.so`。
+bionic 链接器先在 `LD_LIBRARY_PATH` 里找到了它们，符号版本对不上
+（bionic 要 `LIBC`/`LIBC_N`，glibc 只有 `GLIBC_2.x`），程序根本起不来：
 
-而失败信息往往被 `2>/dev/null` 吞掉了 —— 只留下"什么都没发生"。
+```
+CANNOT LINK EXECUTABLE "/system/bin/sed": cannot find "libc.so" from verneed[2]
+  in DT_NEEDED list for "/system/bin/toybox"          ← 退出码 1
+```
+
+**报错是有的**，只是在 stderr 上 —— 脚本里常见的 `2>/dev/null` 一吞，
+就只剩"什么都没发生"。
+
+> 前提是目录里有**与 bionic 同名**的库。只放 `libc.so.6` / `libm.so.6` 这类带版本号文件的
+> glibc 目录（比如只拷了运行所需几个库的精简运行时）不会触发 —— 实测同样的
+> `LD_LIBRARY_PATH` 换成那种目录，`sed` / `rm` 照常工作。
 
 **解法**：`LD_LIBRARY_PATH` **只在最后 `exec` 那一行导出**，
 位置必须晚于所有 bionic 工具调用：
@@ -557,8 +568,8 @@ exec "$LDSO" --library-path "$LIB" "$B/usr/bin/blender" "$@"
 > 再开一层保险。想清楚这一点，就不会急着 `export` 了。
 
 > **教训**：这是第 5 条（两套 C 运行时不能混）的**第三个变体**，
-> 而且是最隐蔽的一个 —— 前两个变体的报错都明说 `version 'LIBC' not found`，
-> 这一次连报错都没有。**"某个工具在脚本里失效、单独跑却正常"
+> 而且是最隐蔽的一个 —— 前两个变体失败在你要启动的那个程序上，
+> 这一次失败的是脚本里顺手调用的系统小工具，报错又常被 `2>/dev/null` 吞掉。**"某个工具在脚本里失效、单独跑却正常"
 > 这个模式，优先怀疑环境变量污染，而不是工具本身。**
 
 ---
@@ -676,22 +687,19 @@ fd = open("/dev/dri/renderD128", O_RDWR);
 
 ---
 
-## 24. 仓库里的包会消失（README 第一步今天跑不通）
+## 24. 第 1 步的 Vulkan 包其实可以省（以及 `libegl1` 的连带坑）
 
-**现象**：照 README 第 1 步走：
+**现象**：在第二台设备上照 README 第 1 步走，`tpkg` 报了
+`⚠️ 索引里没有: vulkan-tools-glibc` / `vulkan-icd-loader-glibc`。
 
-```sh
-node tools/tpkg.mjs install glibc openjdk-17 \
-  vulkan-tools-glibc mesa-vulkan-icd-freedreno-glibc vulkan-icd-loader-glibc
-```
+**复核**：同一天在另一台设备上用本仓库的 `tools/tpkg.mjs` 复查，这两个包**都在**
+Termux glibc 仓库里（v1.3.301），**没能复现**。所以这不是"上游下架"，更可能是那次
+glibc 索引没有完整加载。遇到时先看 `tpkg` 开头那两行
+`仓库 main: N 个包` / `仓库 glibc: N 个包` 是否正常（2026-10 时 glibc 约 415 个），
+出现 `加载失败` 就重跑。
 
-报一堆 `⚠️ 索引里没有: xxx`。实测 Termux 的 glibc 仓库里，
-**`vulkan-icd-loader-glibc` 和 `vulkan-tools-glibc` 已经不在了**。
-
-**根因**：Termux 的 glibc 仓库（`packages-cf.termux.dev/apt/termux-glibc/`）
-是滚动更新的，包名和存在性都会变。文档写死了具体包名，就会随上游漂移而失效。
-
-**解法**：Vulkan 加载器不用从 Termux 拿 —— **Debian 侧本来就有**：
+不过顺着这条查出来一个有用的结论：**这两个包本来就用不着**。
+Vulkan 加载器 Debian 侧本来就有，真要单独装也是走这边：
 
 ```sh
 node tools/debtool.mjs install libvulkan1 vulkan-tools
@@ -704,10 +712,9 @@ node tools/debtool.mjs install libvulkan1 vulkan-tools
 > ⚠️ 但注意：`install libegl1` 会顺带拉进 **`libegl-mesa0` + `mesa-libgallium`**，
 > 也就是第 14 条那个覆盖问题的精确触发条件 —— 装了之后**必须重新解包补丁版 Mesa**。
 
-> **教训**：文档里写死上游包名 = 埋一个定时炸弹。
-> 写"需要哪一类能力"比写"装哪个包"更耐久；真要写包名，
-> 就得接受它需要定期复核。（与第 16/17/18 条的"文档自洽"是同一族问题，
-> 只是这次漂移的不是文档内部，而是**文档与外部世界**。）
+> **教训**：工具报"索引里没有"，先确认索引本身加载全了，再下"上游删包"的结论 ——
+> 后者要在另一个时间、另一台设备上复现过才算数。
+> 另外，写"需要哪一类能力"比写"装哪个包"更耐久。
 
 
 ## 汇总
@@ -720,7 +727,7 @@ node tools/debtool.mjs install libvulkan1 vulkan-tools
 | **非标准根目录** | 7, 8, 13 | 编译期路径假设 `/` 是根 |
 | **发行版构建裁剪** | 9, 10 | 可选组件缺失 / Recommends 依赖 |
 | **安卓安全模型** | 12, 22 | SELinux 比 DAC 更靠后；权限位通过 ≠ 能用 |
-| **包管理冲突** | 14, 24 | 覆盖安装会被修回 / 上游包会消失 |
+| **包管理冲突** | 14, 24 | 覆盖安装会被修回 / 顺带拉进的包会触发覆盖 |
 | **缓存与持久化** | 15, 21 | 默认缓存路径不可写；失效校验漏掉路径变化 |
 | **文档自洽性** | 16, 17, 18 | 结论↔步骤 / 组件↔组件 / 文档↔实际执行，三处不一致 |
 | **实验特性不可信** | 23 | `--help` 里列了 ≠ 能用 |
@@ -728,8 +735,8 @@ node tools/debtool.mjs install libvulkan1 vulkan-tools
 **最有价值的三条：第 5、13、19。**
 
 - **第 5 条**（含 19/20 两个变体）—— 两套 C 运行时混用。变体一次比一次隐蔽：
-  先是报错的库路径、再是没报错的注入变量、最后是**连报错都没有**的
-  "工具静默失效"。
+  先是启动的程序自己的库路径、再是注入变量、最后是脚本里顺手调用的系统小工具
+  ——报错常被 `2>/dev/null` 吞掉，看起来像"工具静默失效"。
 - **第 13 条** —— 报错误导。`EGL_BAD_PARAMETER` 看着像参数问题，实为找不到驱动。
 - **第 19 条** —— 环境变量污染。**"某个工具在脚本里失效、单独跑却正常"**
   这个模式值得单独记住，它会以完全不像环境问题的样子出现。
