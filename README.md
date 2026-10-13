@@ -355,3 +355,22 @@ typst compile notes.typ notes.pdf
 MIT（本仓库自身的脚本与文档）。
 第三方组件遵循各自许可：Blender 为 GPL，Mesa 为 MIT，Debian 各包遵循其自身许可。
 本仓库**不重新分发**这些二进制，只提供获取与配置的方法。
+
+---
+
+## 备注：第 1 步可以简化
+
+> 2026-10-13 于另一台设备（骁龙 8 Gen 3 / Adreno 750）复核时补充。
+> 上面「[安装](#安装)」一节**保持原样未改**。
+
+- **第 1 步实际只需要 `glibc`**：`libvulkan.so.1` 已经在第 2 步 `blender` 的依赖闭包里
+  （实测 1.4.309），诊断用的 `vulkaninfo` 可以用 Debian 的
+  `node tools/debtool.mjs install vulkan-tools`。
+- 若 `tpkg` 报 `⚠️ 索引里没有`，先看它开头 `仓库 glibc: N 个包` 那一行是否正常，
+  异常就重跑 —— 这两个包在 Termux glibc 仓库里是在的（2026-10 复核）。
+- ⚠️ `libEGL.so.1` **不在** `blender` 的依赖闭包里，需要单独装；但 `install libegl1`
+  会顺带拉进 **`libegl-mesa0` + `mesa-libgallium`**，正是
+  [pitfalls #14](docs/pitfalls.md) 那个覆盖问题的触发条件 ——
+  **装完必须重新解包补丁版 Mesa**（把第 3 步再跑一遍），否则 GPU 会悄悄退回发行版 Mesa。
+
+完整记录见 [docs/pitfalls.md #24](docs/pitfalls.md)；这次复核另外新踩到的 #19–#23 也在那份清单里。
