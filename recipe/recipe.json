@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "blender",
+  "kind": "glibc",
+  "revision": 1,
+  "version": "4.3.2",
+  "name": { "zh": "Blender 4.3.2（无头合成/渲染）", "en": "Blender 4.3.2 (headless compositing & rendering)" },
+  "desc": {
+    "zh": "在设备上原生跑 Blender 4.3.2 的无头命令行（没有图形界面，也不需要），用 Python（bpy）驱动：合成器节点做多层动效、关键帧、透明叠加、发光模糊，出 PNG 序列 / H.264 MP4 / GIF；也能读现成视频当素材、跑 3D 渲染（EEVEE 走本机 Adreno GPU）、批量处理图片。Blender 官方没有 Linux arm64 构建，所以 Blender 本体与依赖是首次使用时从 Debian 官方仓库取的（约 267 MB，逐个核对 SHA256，装在应用私有目录，不碰系统分区）。",
+    "en": "Runs Blender 4.3.2's headless CLI natively on device (no GUI, none needed), driven from Python (bpy): multi-layer motion graphics with compositor nodes, keyframes, alpha over, glow/blur, rendered to PNG sequences / H.264 MP4 / GIF; can also read existing video as footage, render 3D (EEVEE on the on-device Adreno GPU) and batch-process images. Blender ships no Linux arm64 build, so the engine and its dependencies are fetched from the official Debian archive on first use (~267 MB, every package verified against its SHA256, installed into the app's private storage — nothing is written to system partitions)."
+  },
+  "roots": ["glibc"],
+  "bin": ["blender", "blender-run"],
+  "selftest": "blender --selftest",
+  "needs": { "shizuku": false, "display": false, "gpu": false },
+  "category": "media",
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://www.blender.org",
+  "maintainers": ["greyoak111"],
+  "files": {
+    "usr/bin/blender": { "src": "bin/blender", "mode": "755" },
+    "usr/bin/blender-run": { "src": "bin/blender-run", "mode": "755" },
+    "usr/share/cccodroid/components/blender/lib/env.sh": { "src": "lib/env.sh", "mode": "644" },
+    "usr/share/cccodroid/components/blender/lib/install-debroot.py": { "src": "lib/install-debroot.py", "mode": "644" },
+    "usr/share/cccodroid/components/blender/lib/selftest.py": { "src": "lib/selftest.py", "mode": "644" }
+  },
+  "notes": "为什么要首次运行下载：Blender 官方只发 x64 / macOS-arm64 / Windows-arm64，没有 Linux arm64；Termux 仓库里也没有。Debian trixie 有 blender 4.3.2（arm64），glibc 要求 >=2.38，本机 glibc 2.44 满足。组件本体只有几个脚本（几十 KB），blender 及其 404 个依赖包走 install-debroot.py：从 deb.debian.org 的 Packages 索引解闭包、逐个核对 SHA256、解到 ~/.cccodroid/blender/data/debroot（下载 267 MB / 解开 1.1 GB），libc6 跳过（用组件的 glibc 依赖）。这与 gpu-driver-glibc 的 lgpu-cc --setup 同一模式，只是体积大一个量级，所以 skill 里写明「先告诉用户、得到同意再跑」。selftest 真跑一层合成（2 层素材 + Transform 关键帧 + Blur + AlphaOver → 12 帧 PNG + H.264 MP4），不需要 GPU，约 2 秒；没装过时会先触发 --setup（CI 里就是这样跑完整的 装→验 链路）。GPU 是可选增强：包装脚本会按 debroot 里的 Mesa 配 EGL/zink 与 ICD，没有 GPU 也能跑（合成/编码/批处理都不吃 GPU，EEVEE 3D 渲染才需要）。上游仓库 greyoak111/blender-cli-android 里有完整的坑清单（24 条）与 GPU 链路文档；改脚本改那边，再用 recipe/sync.sh 同步过来。"
+}
