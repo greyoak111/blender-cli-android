@@ -5,8 +5,13 @@
 Debian 的 arm64 包是能拿到的最新版。glibc 运行时用 Termux 的（安卓上唯一能跑的那份），
 所以这里只装 Debian 的其余包 —— libc6 跳过。
 
-安全：每个 .deb 都拿 Debian 官方索引里的 SHA256 核对，对不上就停；不关证书校验；
-不在系统分区写任何东西（全落在目标目录里）。
+安全：
+  · 索引链：先取 dists/<套件>/InRelease，Packages.gz 必须和它里面记的 SHA256 对上；
+    每个 .deb 再拿 Packages 里的 SHA256 核对。对不上就停。不关证书校验。
+    （InRelease 的 GPG 签名没验：工具包里没有 gpgv，也没有 Debian 钥匙环。信任根是到
+    deb.debian.org 的 HTTPS；InRelease 这一步把信任收拢到一个文件上。）
+  · 解包只许落在目标目录里：成员名带 ..、软链 / 硬链指到目录外、经已有软链绕出去的，一律跳过。
+  · 不在系统分区写任何东西。
 
 用法: install-debroot.py <目标目录> [--dry-run] [--jobs N]
   --dry-run   只算闭包和体积，不下载
@@ -35,6 +40,9 @@ MIRRORS = [os.environ.get("CCODROID_BLENDER_MIRROR", "https://deb.debian.org/deb
 ARCH = "arm64"
 COMPS = ["main", "contrib", "non-free"]
 ROOTS = ["blender", "python3-numpy", "libegl1"]
+# 组件描述、skill 写的是这个上游版本。Debian 点版本把 blender 升了也照装（安全更新不该被挡），
+# 但要明说 —— 实际版本以 blender --selftest 的总结行为准。
+EXPECT_BLENDER = "4.3.2"
 # 用 Termux 的 glibc：安卓上唯一能用的 glibc 运行时（组件依赖的 glibc 包已提供）
 SKIP = {"libc6"}
 
@@ -73,12 +81,38 @@ def ver_key(v):
     return [int(x) if x.isdigit() else x for x in re.split(r"[.\-~+]", v)]
 
 
+def release_sums(mirror):
+    """InRelease 里 SHA256 一节：{相对路径: (sha256, 大小)}"""
+    text = http_get(f"{mirror}dists/{SUITE}/InRelease").decode("utf-8", "replace")
+    sums, on = {}, False
+    for line in text.split("\n"):
+        if line.startswith("SHA256:"):
+            on = True
+            continue
+        if on:
+            if not line.startswith(" "):
+                break
+            parts = line.split()
+            if len(parts) == 3:
+                sums[parts[2]] = (parts[0].lower(), int(parts[1]))
+    if not sums:
+        raise ValueError("InRelease 里没有 SHA256 一节")
+    return sums
+
+
 def load_index():
     for mirror in MIRRORS:
         idx = {}
         try:
+            sums = release_sums(mirror)
             for comp in COMPS:
-                raw = gzip.decompress(http_get(f"{mirror}dists/{SUITE}/{comp}/binary-{ARCH}/Packages.gz"))
+                rel = f"{comp}/binary-{ARCH}/Packages.gz"
+                gz = http_get(f"{mirror}dists/{SUITE}/{rel}")
+                want = sums.get(rel)
+                got = hashlib.sha256(gz).hexdigest()
+                if not want or want[0] != got:
+                    raise ValueError(f"{rel} 和 InRelease 对不上（InRelease {want[0][:16] if want else '无此条'}… / 实得 {got[:16]}…）")
+                raw = gzip.decompress(gz)
                 for block in raw.decode("utf-8", "replace").split("\n\n"):
                     f = parse_deb822(block)
                     name = f.get("Package")
@@ -164,7 +198,14 @@ def tar_stream(name, blob):
     return io.BytesIO(blob)
 
 
+def inside(root_real, path):
+    """path（解析软链后）是否落在 root_real 里"""
+    rp = os.path.realpath(path)
+    return rp == root_real or rp.startswith(root_real + os.sep)
+
+
 def extract_deb(deb, root, stats):
+    root_real = os.path.realpath(root)
     for name, blob in ar_members(deb):
         if not name.startswith("data.tar"):
             continue
@@ -174,6 +215,11 @@ def extract_deb(deb, root, stats):
             if not rel:
                 continue
             dst = os.path.join(root, rel)
+            # 成员名带 ..、或父目录经已有软链绕到根外：跳过（Debian 官方包不会这样，防的是坏包）
+            if ".." in rel.split("/") or not inside(root_real, os.path.dirname(dst) or root):
+                with LOCK:
+                    stats["skipped"] += 1
+                continue
             try:
                 if m.isdir():
                     os.makedirs(dst, exist_ok=True)
@@ -187,12 +233,19 @@ def extract_deb(deb, root, stats):
                         # Debian 包里有用绝对路径指到 /lib、/usr/lib 的软链；
                         # 我们的根不是 "/"，改写成根内路径
                         target = os.path.join(root, target.lstrip("/"))
+                    # 相对软链解析后也得在根内（只按字面算，目标此刻可能还没解出来）
+                    resolved = os.path.normpath(os.path.join(os.path.dirname(dst), target))
+                    if not (resolved == root_real or resolved.startswith(root_real + os.sep)
+                            or resolved == root or resolved.startswith(root + os.sep)):
+                        raise OSError("软链指到根外：" + m.linkname)
                     if os.path.lexists(dst):
                         os.remove(dst)
                     os.symlink(target, dst)
                     key = "links"
                 elif m.islnk():
                     src = os.path.join(root, m.linkname.lstrip("./").lstrip("/"))
+                    if ".." in m.linkname.split("/") or not inside(root_real, src):
+                        raise OSError("硬链指到根外：" + m.linkname)
                     if not os.path.exists(src):
                         key = "skipped"
                     else:
@@ -244,6 +297,10 @@ def main():
     print(f"  根包：{' '.join(ROOTS)}    跳过：{', '.join(sorted(SKIP))}（用 Termux 的 glibc）")
     mirror, idx = load_index()
     order, missing, dl, inst = closure(idx, ROOTS)
+    bv = idx.get("blender", {}).get("version", "?")
+    if not bv.startswith(EXPECT_BLENDER):
+        print(f"  ⚠️ Debian 里的 blender 现在是 {bv}，组件说明写的是 {EXPECT_BLENDER}："
+              f"照装，实际版本以 blender --selftest 的总结行为准")
     print(f"  依赖闭包：{len(order)} 个包 · 下载 {dl / 1048576:.0f} MB · 解开后约 {inst / 1024:.0f} MB")
     if missing:
         print(f"  ⚠️ 没解析到的名字 {len(missing)} 个（虚包/环境限定，通常无害）："
