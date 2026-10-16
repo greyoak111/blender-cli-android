@@ -1,0 +1,38 @@
+#!{{PREFIX}}/bin/sh
+# ─────────────────────────────────────────────────────────────────────
+#  blender-run —— 用组件自己那套 glibc/GPU 环境跑任意程序（诊断/搭配用）
+#
+#    blender-run python3 -c "import sys; print(sys.version)"   # Debian 的 python3
+#    blender-run vulkaninfo --summary                          # 看 Vulkan 链路
+#    blender-run /usr/bin/foo                                  # 绝对路径按 Debian 根解析
+#
+#  环境装配与 blender 完全同一套（lib/env.sh），只是入口换成了你给的程序。
+# ─────────────────────────────────────────────────────────────────────
+set -e
+SELF="$0"
+command -v -- "$SELF" >/dev/null 2>&1 && SELF="$(command -v -- "$SELF")"
+if command -v readlink >/dev/null 2>&1; then
+  _r=$(readlink -f -- "$SELF" 2>/dev/null) && [ -n "$_r" ] && SELF="$_r"
+fi
+BIN=$(cd "$(dirname "$SELF")" && pwd)
+PREFIX=$(cd "$BIN/.." && pwd)
+LIBDIR="$PREFIX/share/cccodroid/components/blender/lib"
+[ -f "$LIBDIR/env.sh" ] || LIBDIR="$BIN/../lib"
+DATA="${CCODROID_BLENDER_DATA:-$HOME/.cccodroid/blender}"
+
+[ $# -ge 1 ] || { echo "用法: blender-run <程序> [参数...]" >&2; exit 2; }
+[ -x "$DATA/data/debroot/usr/bin/blender" ] || {
+  echo "blender-run: 还没装 Debian 用户空间，先跑 blender --setup（约 267 MB）" >&2; exit 1; }
+
+. "$LIBDIR/env.sh"
+
+# 相对名按 Debian 的 bin 找；绝对路径先按 Debian 根解析，找不到再用原路径
+case "$1" in
+  /*) PROG="$B$1"; [ -x "$PROG" ] || PROG="$1" ;;
+  *)  PROG="$B/usr/bin/$1" ;;
+esac
+[ -x "$PROG" ] || { echo "blender-run: 不是可执行文件：$PROG" >&2; exit 1; }
+shift
+
+export LD_LIBRARY_PATH="$LIB"
+exec "$LDSO" --library-path "$LIB" "$PROG" "$@"

@@ -1,0 +1,75 @@
+#!{{PREFIX}}/bin/sh
+# ─────────────────────────────────────────────────────────────────────
+#  blender —— 无头 Blender 4.3.2（cccodroid 组件，glibc 侧）
+#
+#    blender -b --python job.py        # 无头跑 Python：合成/渲染/批处理都这么用
+#    blender -b scene.blend -f 1       # 渲染第 1 帧
+#    blender --version
+#    blender --setup [--dry-run]       # 首次安装 Debian 用户空间（约 267 MB）
+#    blender --selftest                # 无头合成自检（没装过会先装）
+#    blender --where                   # 打印路径与状态（诊断）
+#
+#  环境装配在 lib/env.sh（库路径、GPU、可写目录、字体）；
+#  路径全部从本脚本位置推导，前缀或数据目录整体搬走也能用。
+# ─────────────────────────────────────────────────────────────────────
+set -e
+SELF="$0"
+command -v -- "$SELF" >/dev/null 2>&1 && SELF="$(command -v -- "$SELF")"
+if command -v readlink >/dev/null 2>&1; then
+  _r=$(readlink -f -- "$SELF" 2>/dev/null) && [ -n "$_r" ] && SELF="$_r"
+fi
+BIN=$(cd "$(dirname "$SELF")" && pwd)
+PREFIX=$(cd "$BIN/.." && pwd)
+LIBDIR="$PREFIX/share/cccodroid/components/blender/lib"
+[ -f "$LIBDIR/env.sh" ] || LIBDIR="$BIN/../lib"          # 手动布局兜底
+DATA="${CCODROID_BLENDER_DATA:-$HOME/.cccodroid/blender}"
+INSTALLER="$LIBDIR/install-debroot.py"
+BL="$DATA/data/debroot/usr/bin/blender"
+
+usage() { sed -n '2,16p' "$SELF" | sed 's/^#\{1,2\} \{0,1\}//'; exit "${1:-0}"; }
+
+# 装好了没：只看 Blender 本体在不在。
+# ⚠️ 别拿「Debian 的 libc.so.6 在不在」当判据 —— 我们按设计跳过 libc6
+# （glibc 运行时用 Termux 那份），Debian 根里永远没有 libc.so.6。
+engine_ok() { [ -x "$BL" ]; }
+
+case "${1:-}" in
+  -h|--help) usage 0 ;;
+  --where)
+    echo "组件目录   $LIBDIR"
+    echo "数据目录   $DATA"
+    echo "Debian 根  $DATA/data/debroot $(engine_ok && echo '（已装）' || echo '（没装）')"
+    echo "glibc 根   ${CCODROID_GLIBC_ROOT:-$PREFIX/glibc}"
+    exit 0 ;;
+  --setup)
+    shift
+    [ -f "$INSTALLER" ] || { echo "blender: 组件文件不全（缺 $INSTALLER）" >&2; exit 1; }
+    exec python3 "$INSTALLER" "$DATA/data/debroot" "$@" ;;
+  --selftest)
+    shift
+    if ! engine_ok; then
+      echo "blender: 还没装 Debian 用户空间，自检前先装 —— 约 267 MB 下载 / 1.1 GB 解开" >&2
+      python3 "$INSTALLER" "$DATA/data/debroot" || exit $?
+    fi
+    . "$LIBDIR/env.sh"
+    export LD_LIBRARY_PATH="$LIB"
+    exec "$LDSO" --library-path "$LIB" "$B/usr/bin/blender" \
+      -b --factory-startup --python-exit-code 1 --python "$LIBDIR/selftest.py" "$@" ;;
+esac
+
+[ $# -gt 0 ] || usage 2
+if ! engine_ok; then
+  echo "blender: 还没装 Debian 用户空间（Blender 本体）。" >&2
+  echo "  装：   blender --setup        # 从 Debian 官方仓库取，约 267 MB 下载 / 1.1 GB 解开" >&2
+  echo "  自检： blender --selftest     # 会先把上面这步做掉，再跑一次无头合成" >&2
+  exit 1
+fi
+
+. "$LIBDIR/env.sh"
+[ -x "$LDSO" ] || { echo "blender: 找不到 glibc 动态加载器：$LDSO（glibc 依赖没装？）" >&2; exit 1; }
+
+# LD_LIBRARY_PATH 只能在最后、一次性导出，且必须晚于所有 bionic 工具调用
+# （见 lib/env.sh 里的长注释：它一旦污染 shell 环境，sed/rm/find 会静默失效）。
+# 不能用 `exec env LD_LIBRARY_PATH=...` —— env 本身也是 bionic 程序，同样中招。
+export LD_LIBRARY_PATH="$LIB"
+exec "$LDSO" --library-path "$LIB" "$B/usr/bin/blender" "$@"
