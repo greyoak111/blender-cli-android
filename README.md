@@ -8,6 +8,12 @@
 > 里跑起来的 —— 那个 App 提供了 Shizuku 特权通道与文件访问，才让底下这些成为可能。
 > 配套工具集见 **[deepseek-harness-android-tools](https://github.com/greyoak111/deepseek-harness-android-tools)**。
 
+> **在 [cccodroid](https://github.com/greyoak111/cccodroid) 里用**：组件市场的
+> [`blender` 组件](https://github.com/greyoak111/cccodroid-components/tree/main/recipes/blender)就是照本仓库
+> 「[安装](#安装)」第 1–3 步自动装的 —— glibc 由工具包底座提供，Debian 依赖闭包逐个核对 SHA256，
+> 补丁版 Mesa 钉死在下面实测的那一版。在「扩展」页点安装，第一次运行 `blender --setup` 即可，
+> 不用手动走下面的步骤。原理和坑仍以本仓库的文档为准。
+
 ```
 $ blender --version
 Blender 4.3.2
@@ -124,7 +130,12 @@ node tools/debtool.mjs install blender python3-numpy
 
 # 3) 补丁版 Mesa（推荐，见「鸣谢」）
 #    从 lfdevs/mesa-for-android-container 下载 debian_trixie_arm64 的 mesa 包
+#    本仓库实测的是 mesa-26.2.0-devel-20260610 这一版（Vulkan 1.4.353）：
+#      mesa-for-android-container_26.2.0-devel-20260610_debian_trixie_arm64.tar.gz
+#      SHA256 f84bd8cc8f4be226ec3572f5dc26798ba345494da32d9c82409df6fe396fef30
 #    注：发行版自带的 Mesa 也能跑（实测慢约 1.4 倍），补丁版更快且 Vulkan 更新
+#    ⚠️ 第 2 步的依赖闭包里没有 Turnip（mesa-vulkan-drivers 不是 blender 的依赖），
+#       这一步省掉的话，GPU 只能靠第 1 步那份 Termux 的 Turnip
 cd tools/debroot && tar xzf /path/to/mesa-for-android-container_*_debian_trixie_arm64.tar.gz && cd -
 
 # 4) 运行
