@@ -1,5 +1,16 @@
 # Changelog
 
+## 未发布 —— 钉死实测的补丁版 Mesa；指向 cccodroid 组件
+
+- README 第 3 步、[docs/credits.md](docs/credits.md)：写明实测的是
+  `mesa-for-android-container_26.2.0-devel-20260610`（Vulkan 1.4.353）并给出 SHA256。
+  鸣谢里原来写的 26.3.0 是后来的版本，没有实测过。
+- README 第 3 步补一句：第 2 步的 Debian 依赖闭包里**没有 Turnip**，省掉这一步 GPU 就没有补丁版驱动可用。
+  cccodroid 的 blender 组件 r1–r3 正是漏了这一步（装出来 `VK_ERROR_INCOMPATIBLE_DRIVER`），
+  r4 补回后真机实测 `zink Vulkan 1.4 (Turnip)`，猴头 640×480 预热 6.7 s / llvmpipe 84 s。
+- README 开头加「在 cccodroid 里用」：组件市场的 `blender` 组件照本仓库第 1–3 步自动安装。
+  原先的 PR #2（把配方放进本仓库 `recipe/`）因描述与实际不符、流程已变而关闭，配方在市场仓库就地维护。
+
 ## v1.2.0 —— 第二台设备复现：6 条新坑
 
 在**另一台设备（骁龙 8 Gen 3 / Adreno 750）、另一套宿主环境**上重新走了一遍

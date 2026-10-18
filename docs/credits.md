@@ -48,12 +48,14 @@
 **具体借鉴了什么：**
 
 1. **补丁版 Mesa 二进制** —— 上游 Mesa 在安卓容器环境下跑 Adreno 有问题，
-   这个项目专门做了修补。我们直接使用其 Debian trixie arm64 预编译包：
+   这个项目专门做了修补。我们直接使用其 Debian trixie arm64 预编译包，实测的是这一版：
    ```
-   mesa-for-android-container_26.3.0-devel-*_debian_trixie_arm64.tar.gz
-   turnip_26.3.0-devel-*_debian_trixie_arm64.tar.gz
+   mesa-for-android-container_26.2.0-devel-20260610_debian_trixie_arm64.tar.gz
+   SHA256 f84bd8cc8f4be226ec3572f5dc26798ba345494da32d9c82409df6fe396fef30
    ```
    实测**快约 1.4 倍**，Vulkan 从 1.3.289 升到 1.4.353。
+   （这个包已经带了 Turnip，不用另下 `turnip_*` 包。之后的 26.3.0-devel 等新版本没有重新实测。
+   cccodroid 的 blender 组件也钉在这一版。）
 
 2. **兼容性确认** —— 项目文档的兼容表明确列出
    **Adreno 710/720/722/730/732/735/740/750 → OpenGL / OpenGL ES / Vulkan 全部 Supported**。
